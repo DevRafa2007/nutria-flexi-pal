@@ -91,29 +91,29 @@ const StreakCalendar = () => {
 
   return (
     <div className="w-full space-y-4">
-      {/* Streak Info */}
+      {/* Streak Info Detalhado */}
       <Card className="border-primary/20 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <div className="relative">
-                <Flame className="w-12 h-12 text-orange-500 animate-bounce" />
-                <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-lg">
+                <Flame className="w-10 h-10 sm:w-12 sm:h-12 text-orange-500 animate-bounce" />
+                <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-base sm:text-lg">
                   {streak?.current_streak || 0}
                 </span>
               </div>
               <div>
-                <p className="text-lg font-bold text-orange-700">
+                <p className="text-base sm:text-lg font-bold text-orange-700 dark:text-orange-300">
                   Sua sequência: {streak?.current_streak || 0} dia{streak?.current_streak !== 1 ? "s" : ""}
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Melhor: {streak?.best_streak || 0} dias 🏆
                 </p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <p className="text-xs text-muted-foreground">Começou em</p>
-              <p className="font-semibold">
+              <p className="text-sm sm:text-base font-semibold">
                 {streak?.start_date
                   ? new Date(streak.start_date).toLocaleDateString("pt-BR")
                   : "Hoje"}
