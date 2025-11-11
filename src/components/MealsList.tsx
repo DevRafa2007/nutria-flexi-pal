@@ -123,7 +123,7 @@ const MealsList = () => {
               <div className="text-4xl">🍽️</div>
               <h3 className="font-semibold text-lg">Nenhuma refeição ainda</h3>
               <p className="text-sm text-muted-foreground">
-                Converse com a IA na aba "Chat IA" para criar sua primeira refeição personalizada!
+                Converse com a IA na aba "Monte sua Dieta" para criar sua primeira refeição personalizada!
               </p>
             </div>
           </CardContent>

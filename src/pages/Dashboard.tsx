@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardHeader from "@/components/DashboardHeader";
 
 export function DashboardPage() {
-  const [currentTab, setCurrentTab] = useState("chat");
+  const [currentTab, setCurrentTab] = useState("meals");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-primary/5">
@@ -23,6 +23,13 @@ export function DashboardPage() {
         </div>
 
         <div className="space-y-4">
+          {/* Aba de Refeições */}
+          {currentTab === "meals" && (
+            <div className="space-y-4 animate-fade-in">
+              <MealsList />
+            </div>
+          )}
+
           {/* Aba de Chat */}
           {currentTab === "chat" && (
             <div className="space-y-4 animate-fade-in">
@@ -44,12 +51,6 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* Aba de Refeições */}
-          {currentTab === "meals" && (
-            <div className="space-y-4 animate-fade-in">
-              <MealsList />
-            </div>
-          )}
 
           {/* Aba de Progresso com Calendário de Streak */}
           {currentTab === "progress" && (

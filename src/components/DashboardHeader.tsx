@@ -24,8 +24,8 @@ const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
   };
 
   const tabs = [
-    { value: "chat", label: "💬 Chat IA", icon: "💬" },
-    { value: "meals", label: "🍽️ Refeições", icon: "🍽️" },
+    { value: "meals", label: "🍽️ Minhas Refeições", icon: "🍽️" },
+    { value: "chat", label: "🍴 Monte sua Dieta", icon: "🍴" },
     { value: "progress", label: "📊 Progresso", icon: "📊" },
     { value: "profile", label: "👤 Perfil", icon: "👤" },
   ];
