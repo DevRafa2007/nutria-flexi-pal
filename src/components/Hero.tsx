@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Hero = () => {
   return (
@@ -35,19 +36,23 @@ const Hero = () => {
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Button 
                 size="lg" 
+                asChild
                 className="bg-primary hover:bg-primary-dark shadow-soft hover:shadow-glow transition-all duration-300 group w-full sm:w-auto"
-                onClick={() => document.getElementById('chat')?.scrollIntoView({ behavior: 'smooth' })}
               >
-                Iniciar Conversa
-                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
+                <Link to="/register">
+                  Criar Conta
+                  <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
               </Button>
               <Button 
                 size="lg" 
                 variant="outline"
+                asChild
                 className="border-primary/30 hover:bg-primary/5 w-full sm:w-auto"
-                onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
               >
-                Ver Como Funciona
+                <Link to="/login">
+                  Fazer Login
+                </Link>
               </Button>
             </div>
 
