@@ -7,14 +7,15 @@ import { toast } from "sonner";
 import { sendMessageToGroq, NUTRITION_SYSTEM_PROMPT, parseNutritionPlan } from "@/lib/groqClient";
 import { ChatMessage, Meal } from "@/lib/types";
 import useChatMessages from "@/hooks/useChatMessages";
+import useUserProfile from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
 
 interface ChatInterfaceProps {
   onMealGenerated?: (meal: Meal) => void;
-  userProfile?: any;
 }
 
 const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
+  const { profile } = useUserProfile();
   const { messages, addMessage, clearMessages, isLoading: messagesLoading } = useChatMessages();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -114,8 +115,31 @@ const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
         })
       );
 
+      // Adicionar informações do perfil ao contexto se disponível
+      let enhancedPrompt = NUTRITION_SYSTEM_PROMPT;
+      
+      if (profile) {
+        enhancedPrompt += `\n\nINFORMAÇÕES DO PERFIL DO USUÁRIO (use para personalizar refeições):
+- Peso: ${profile.weight}kg
+- Altura: ${profile.height}cm
+- Idade: ${profile.age} anos
+- Sexo: ${profile.gender}
+- Objetivo: ${profile.goal === 'lose_weight' ? 'Emagrecer' : profile.goal === 'gain_muscle' ? 'Ganhar massa muscular' : 'Manter peso'}
+- Nível de Atividade: ${profile.activity_level}
+- TDEE: ${profile.tdee} kcal/dia
+- Meta de Calorias: ${profile.target_calories} kcal/dia
+- Meta de Proteína: ${profile.target_protein}g/dia
+- Meta de Carboidratos: ${profile.target_carbs}g/dia
+- Meta de Gordura: ${profile.target_fat}g/dia
+${profile.dietary_restrictions?.length ? `- Restrições: ${profile.dietary_restrictions.join(', ')}` : ''}
+${profile.preferred_foods?.length ? `- Alimentos Preferidos: ${profile.preferred_foods.join(', ')}` : ''}
+${profile.disliked_foods?.length ? `- Alimentos que Não Gosta: ${profile.disliked_foods.join(', ')}` : ''}
+
+IMPORTANTE: Use essas informações para criar refeições perfeitamente alinhadas com as necessidades e preferências do usuário.`;
+      }
+
       // Chama Groq API
-      const response = await sendMessageToGroq(groqMessages, NUTRITION_SYSTEM_PROMPT);
+      const response = await sendMessageToGroq(groqMessages, enhancedPrompt);
 
       // Tenta fazer parse de refeição no JSON
       const parsedMeal = parseNutritionPlan(response);

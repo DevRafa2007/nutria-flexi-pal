@@ -2,6 +2,7 @@ import { useState } from "react";
 import ChatAI from "@/components/ChatAI";
 import MealsList from "@/components/MealsList";
 import StreakCalendar from "@/components/StreakCalendar";
+import ProfileForm from "@/components/ProfileForm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardHeader from "@/components/DashboardHeader";
 
@@ -62,17 +63,7 @@ export function DashboardPage() {
           {/* Aba de Perfil */}
           {currentTab === "profile" && (
             <div className="space-y-4 animate-fade-in">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Seu Perfil Nutricional</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">
-                    Configure suas informações para recomendações mais precisas da IA.
-                  </p>
-                  {/* TODO: Implementar formulário de perfil */}
-                </CardContent>
-              </Card>
+              <ProfileForm />
             </div>
           )}
         </div>
