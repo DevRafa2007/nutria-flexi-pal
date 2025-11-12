@@ -9,9 +9,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Meal, MeasurementUnit } from "@/lib/types";
 import { convertMeasurement } from "@/lib/groqClient";
-import { ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Check, Trash2, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import useConsumptionTracking from "@/hooks/useConsumptionTracking";
@@ -20,9 +29,10 @@ interface MealDisplayProps {
   meal: Meal;
   mealId?: string;
   onUpdate?: (meal: Meal) => void;
+  onDelete?: (mealId: string) => void;
 }
 
-const MealDisplay = ({ meal, mealId, onUpdate }: MealDisplayProps) => {
+const MealDisplay = ({ meal, mealId, onUpdate, onDelete }: MealDisplayProps) => {
   const [expanded, setExpanded] = useState(true);
   const [selectedUnits, setSelectedUnits] = useState<Record<string, MeasurementUnit>>(
     meal.foods.reduce((acc, food, idx) => {
@@ -32,6 +42,8 @@ const MealDisplay = ({ meal, mealId, onUpdate }: MealDisplayProps) => {
   );
   const [consumedFoods, setConsumedFoods] = useState<Set<number>>(new Set());
   const [allConsumed, setAllConsumed] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { markMealConsumed } = useConsumptionTracking();
 
   const getMealTypeColor = (type: string) => {
@@ -133,6 +145,47 @@ Macros Totais:
     } catch (err) {
       console.error("Erro ao marcar consumo:", err);
       toast.error("Erro ao registrar consumo");
+    }
+  };
+
+  const handleDeleteMeal = async () => {
+    if (!mealId) {
+      toast.error("ID da refeição não encontrado");
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+
+      // Deletar alimentos associados primeiro
+      const { error: foodsError } = await supabase
+        .from("meal_foods")
+        .delete()
+        .eq("meal_id", mealId);
+
+      if (foodsError) throw foodsError;
+
+      // Deletar a refeição
+      const { error: mealError } = await supabase
+        .from("meals")
+        .delete()
+        .eq("id", mealId);
+
+      if (mealError) throw mealError;
+
+      toast.success(`"${meal.name}" deletada com sucesso! 🗑️`);
+      
+      // Chamar callback se existir
+      if (onDelete) {
+        onDelete(mealId);
+      }
+    } catch (err) {
+      console.error("Erro ao deletar refeição:", err);
+      const errorMsg = err instanceof Error ? err.message : "Erro ao deletar refeição";
+      toast.error(errorMsg);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
     }
   };
 
@@ -321,7 +374,37 @@ Macros Totais:
             >
               <Copy className="w-4 h-4" />
             </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+              title="Deletar refeição"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
           </div>
+
+          {/* Dialog de Confirmação para Deletar */}
+          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Deletar refeição?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que quer deletar "{meal.name}"? Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="flex gap-2">
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteMeal}
+                  disabled={isDeleting}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  {isDeleting ? "Deletando..." : "Deletar"}
+                </AlertDialogAction>
+              </div>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       )}
     </Card>

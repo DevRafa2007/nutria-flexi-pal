@@ -41,10 +41,66 @@ const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
   }, [messages, isLoading]);
 
   /**
+   * Carrega refeições do usuário do banco de dados
+   */
+  const loadUserMeals = async (): Promise<string> => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return "";
+
+      // ⚠️ OTIMIZAÇÃO: Buscar apenas últimas 5 refeições (não 10) para economizar tokens
+      const { data: meals, error } = await supabase
+        .from("meals")
+        .select("*, meal_foods(*)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error || !meals?.length) return "";
+
+      // ⚠️ OTIMIZAÇÃO: Formato comprimido de refeições para economizar tokens
+      let mealsContext = "\n\nÚltimas refeições:\n";
+      meals.forEach((meal: any) => {
+        const totalCals = meal.meal_foods.reduce((sum: number, f: any) => sum + (f.calories || 0), 0);
+        const totalProt = meal.meal_foods.reduce((sum: number, f: any) => sum + (f.protein || 0), 0);
+        const foods = meal.meal_foods.map((f: any) => `${f.quantity}${f.unit} ${f.food_name}`).join(', ');
+        mealsContext += `- ${meal.name}: ${foods} | ${totalCals}kcal, ${totalProt}g prot\n`;
+      });
+
+      return mealsContext;
+    } catch (err) {
+      console.error("Erro ao carregar refeições:", err);
+      return "";
+    }
+  };
+
+  /**
    * Salva refeição no banco de dados
    */
   const saveMealToDatabase = async (meal: Meal) => {
     try {
+      // Validar refeição
+      if (!meal.name || meal.name.trim() === '') {
+        toast.error("Nome da refeição inválido");
+        return;
+      }
+
+      if (!meal.foods || meal.foods.length === 0) {
+        toast.error("Refeição sem alimentos");
+        return;
+      }
+
+      // Validar que tem dados corretos
+      const totalCals = meal.foods.reduce((sum, f) => sum + (f.macros.calories || 0), 0);
+      if (totalCals < 50) {
+        console.warn("Refeição com calorias muito baixas:", meal);
+        toast.error("Refeição com dados inválidos (calorias muito baixas)");
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -68,18 +124,25 @@ const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
 
       if (mealError) throw mealError;
 
-      // Salvar alimentos da refeição
-      const foodsToInsert = meal.foods.map((food) => ({
-        meal_id: mealData.id,
-        food_name: food.name,
-        quantity: food.quantity,
-        unit: food.unit,
-        calories: food.macros.calories,
-        protein: food.macros.protein,
-        carbs: food.macros.carbs,
-        fat: food.macros.fat,
-        notes: food.notes || "",
-      }));
+      // Validar e salvar alimentos
+      const foodsToInsert = meal.foods
+        .filter(f => f.name && f.name.trim() !== '')
+        .map((food) => ({
+          meal_id: mealData.id,
+          food_name: food.name,
+          quantity: food.quantity || 0,
+          unit: food.unit || 'g',
+          calories: food.macros.calories || 0,
+          protein: food.macros.protein || 0,
+          carbs: food.macros.carbs || 0,
+          fat: food.macros.fat || 0,
+          notes: food.notes || "",
+        }));
+
+      if (foodsToInsert.length === 0) {
+        toast.error("Nenhum alimento válido na refeição");
+        return;
+      }
 
       const { error: foodsError } = await supabase
         .from("meal_foods")
@@ -107,8 +170,16 @@ const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
       // Adiciona mensagem do usuário ao banco
       await addMessage("user", userMessage);
 
-      // Prepara histórico de mensagens para Groq
-      const groqMessages = [...messages, { role: "user" as const, content: userMessage }].map(
+      // Carrega refeições anteriores do usuário
+      const previousMealsContext = await loadUserMeals();
+
+      // ⚠️ OTIMIZAÇÃO: Limitar histórico para evitar erro 413 (Content Too Large)
+      // Mantém apenas as últimas 8 mensagens + a mensagem atual para economizar tokens
+      const MAX_HISTORY = 8;
+      const allMessages = [...messages, { role: "user" as const, content: userMessage }];
+      const messagesToSend = allMessages.slice(-MAX_HISTORY);
+      
+      const groqMessages = messagesToSend.map(
         (msg) => ({
           role: msg.role as "user" | "assistant",
           content: msg.content,
@@ -119,70 +190,98 @@ const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
       let enhancedPrompt = NUTRITION_SYSTEM_PROMPT;
       
       if (profile) {
-        enhancedPrompt += `\n\nINFORMAÇÕES DO PERFIL DO USUÁRIO (use para personalizar refeições):
-- Peso: ${profile.weight}kg
-- Altura: ${profile.height}cm
-- Idade: ${profile.age} anos
-- Sexo: ${profile.gender}
-- Objetivo: ${profile.goal === 'lose_weight' ? 'Emagrecer' : profile.goal === 'gain_muscle' ? 'Ganhar massa muscular' : 'Manter peso'}
-- Nível de Atividade: ${profile.activity_level}
-- TDEE: ${profile.tdee} kcal/dia
-- Meta de Calorias: ${profile.target_calories} kcal/dia
-- Meta de Proteína: ${profile.target_protein}g/dia
-- Meta de Carboidratos: ${profile.target_carbs}g/dia
-- Meta de Gordura: ${profile.target_fat}g/dia
-${profile.dietary_restrictions?.length ? `- Restrições: ${profile.dietary_restrictions.join(', ')}` : ''}
-${profile.preferred_foods?.length ? `- Alimentos Preferidos: ${profile.preferred_foods.join(', ')}` : ''}
-${profile.disliked_foods?.length ? `- Alimentos que Não Gosta: ${profile.disliked_foods.join(', ')}` : ''}
+        // ⚠️ OTIMIZAÇÃO: Formato comprimido do perfil para economizar tokens
+        enhancedPrompt += `\n\n📋 PERFIL:
+Peso ${profile.weight}kg | Alt ${profile.height}cm | ${profile.age}a | ${profile.gender} | ${profile.goal === 'lose_weight' ? 'Emagrecer' : profile.goal === 'gain_muscle' ? 'Ganhar' : 'Manter'} | ${profile.activity_level}
+TDEE: ${profile.tdee}kcal
 
-IMPORTANTE: Use essas informações para criar refeições perfeitamente alinhadas com as necessidades e preferências do usuário.`;
+⭐ METAS (EXATAMENTE):
+${profile.target_calories}kcal | ${profile.target_protein}g prot | ${profile.target_carbs}g carb | ${profile.target_fat}g gord
+${profile.dietary_restrictions?.length ? `Restrições: ${profile.dietary_restrictions.join(', ')} ` : ''}${profile.preferred_foods?.length ? `| Gosta: ${profile.preferred_foods.slice(0, 2).join(', ')}` : ''}
+
+QUANDO CRIAR REFEIÇÃO, USE ESTE JSON (sem markdown):
+{"meal_type":"breakfast","name":"Nome","description":"Desc","foods":[{"name":"Alimento","quantity":100,"unit":"g","calories":150,"protein":20,"carbs":10,"fat":5}],"totals":{"calories":TOTAL,"protein":TOTAL,"carbs":TOTAL,"fat":TOTAL}}
+
+${previousMealsContext}`;
       }
 
       // Chama Groq API
       const response = await sendMessageToGroq(groqMessages, enhancedPrompt);
 
-      // Tenta fazer parse de refeição no JSON
-      const parsedMeal = parseNutritionPlan(response);
+      // DEBUG: Mostrar resposta bruta
+      console.log("🤖 Groq Response (raw):", response.substring(0, 500));
+      
+      // Tenta extrair MÚLTIPLAS refeições no JSON
+      const parsedMeals = parseNutritionPlan(response);
+      
+      // DEBUG: Mostrar resultado do parsing
+      console.log("📊 Parsed Meals:", parsedMeals?.length || 0, "refeições encontradas");
 
-      if (parsedMeal && parsedMeal.foods && parsedMeal.foods.length > 0) {
-        // Se for uma refeição válida, salvar no banco e não mostrar o JSON no chat
-        const meal: Meal = {
-          name: parsedMeal.name || "Refeição gerada",
-          description: parsedMeal.description || "",
-          type: parsedMeal.meal_type || "breakfast",
-          foods: parsedMeal.foods.map((f: any) => ({
-            name: f.name,
-            quantity: f.quantity,
-            unit: f.unit,
-            macros: {
-              protein: f.protein || 0,
-              carbs: f.carbs || 0,
-              fat: f.fat || 0,
-              calories: f.calories || 0,
+      if (parsedMeals && parsedMeals.length > 0) {
+        // Salvar TODAS as refeições encontradas
+        let savedCount = 0;
+        
+        for (const parsedMeal of parsedMeals) {
+          // Validar refeição
+          if (!parsedMeal.foods?.length || !parsedMeal.totals?.calories || parsedMeal.totals.calories < 50) {
+            console.warn("⚠️ Refeição inválida, pulando:", parsedMeal.name);
+            continue;
+          }
+
+          const meal: Meal = {
+            name: parsedMeal.name || "Refeição gerada",
+            description: parsedMeal.description || "",
+            type: parsedMeal.meal_type || "breakfast",
+            foods: parsedMeal.foods.map((f: any) => ({
+              name: f.name,
+              quantity: f.quantity,
+              unit: f.unit,
+              macros: {
+                protein: f.protein || 0,
+                carbs: f.carbs || 0,
+                fat: f.fat || 0,
+                calories: f.calories || 0,
+              },
+              notes: f.notes || "",
+            })),
+            totalMacros: {
+              protein: parsedMeal.totals?.protein || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.protein || 0), 0),
+              carbs: parsedMeal.totals?.carbs || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.carbs || 0), 0),
+              fat: parsedMeal.totals?.fat || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.fat || 0), 0),
+              calories: parsedMeal.totals?.calories || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.calories || 0), 0),
             },
-            notes: f.notes || "",
-          })),
-          totalMacros: {
-            protein: parsedMeal.totals?.protein || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.protein || 0), 0),
-            carbs: parsedMeal.totals?.carbs || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.carbs || 0), 0),
-            fat: parsedMeal.totals?.fat || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.fat || 0), 0),
-            calories: parsedMeal.totals?.calories || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.calories || 0), 0),
-          },
-        };
+          };
 
-        // Salvar refeição
-        await saveMealToDatabase(meal);
+          // Salvar refeição
+          try {
+            await saveMealToDatabase(meal);
+            savedCount++;
+            console.log(`✅ Refeição "${meal.name}" salva (${savedCount}/${parsedMeals.length})`);
+          } catch (error) {
+            console.error(`❌ Erro ao salvar "${meal.name}":`, error);
+          }
+        }
 
-        // Mostrar apenas a explicação, não o JSON
-        const responseWithoutJSON = response
-          .replace(/\{[\s\S]*\}/g, "")
-          .trim();
+        // Mostrar mensagem de resumo
+        let responseWithoutJSON = response
+          .replace(/```json[\s\S]*?```/g, "")
+          .replace(/\{[\s\S]*?\}/g, "")
+          .trim()
+          .split('\n')
+          .filter(line => line.trim() !== '')
+          .join('\n');
 
-        const finalResponse =
-          responseWithoutJSON ||
-          `✅ Refeição "${meal.name}" criada com sucesso! Você pode ver detalhes na aba "Minhas Refeições"`;
+        if (!responseWithoutJSON || responseWithoutJSON.length < 10) {
+          responseWithoutJSON = `
+✅ ${savedCount} refeição(ões) criada(s) com sucesso!
 
-        await addMessage("assistant", finalResponse);
+� Refeições adicionadas:
+${parsedMeals.slice(0, savedCount).map(m => `- ${m.name}: ${Math.round(m.totals?.calories || 0)}kcal`).join('\n')}
+
+Ver detalhes em "Minhas Refeições" 👉`;
+        }
+
+        await addMessage("assistant", responseWithoutJSON);
       } else {
         // Se for apenas conversa, mostrar normalmente
         await addMessage("assistant", response);
@@ -199,10 +298,16 @@ IMPORTANTE: Use essas informações para criar refeições perfeitamente alinhad
   const handleClearChat = async () => {
     if (window.confirm("Tem certeza que deseja limpar todo o histórico de chat?")) {
       try {
+        setIsLoading(true);
         await clearMessages();
-        toast.success("Histórico limpo com sucesso");
+        setInput(""); // Limpar input também
+        setError(null);
+        toast.success("✅ Histórico deletado com sucesso");
       } catch (err) {
-        toast.error("Erro ao limpar histórico");
+        console.error('Erro ao limpar:', err);
+        toast.error("❌ Erro ao limpar histórico. Tente novamente.");
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -360,19 +465,6 @@ IMPORTANTE: Use essas informações para criar refeições perfeitamente alinhad
           )}
         </CardContent>
       </Card>
-
-      <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-lg">
-        <div className="flex gap-2 items-start">
-          <Sparkles className="w-4 h-4 text-primary mt-1 flex-shrink-0" />
-          <div className="text-xs text-muted-foreground leading-relaxed">
-            <p className="font-semibold text-primary mb-1">💡 Dica:</p>
-            <p>
-              A IA está analisando suas informações em tempo real. Quando uma refeição é gerada,
-              ela aparece automaticamente em "Minhas Refeições" para você acompanhar seu consumo!
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

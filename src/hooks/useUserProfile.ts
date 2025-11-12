@@ -123,9 +123,9 @@ export function useUserProfile() {
       }
 
       const { data, error: fetchError } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (fetchError) throw fetchError;
@@ -156,7 +156,7 @@ export function useUserProfile() {
       const macros = tdee > 0 ? calculateMacros(fullProfile as UserProfile, tdee) : null;
 
       const dataToSave = {
-        user_id: user.id,
+        id: user.id,
         ...profileData,
         ...(tdee > 0 && { tdee }),
         ...(macros && macros),
@@ -164,23 +164,23 @@ export function useUserProfile() {
 
       // Verificar se perfil já existe
       const { data: existingProfile } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (existingProfile) {
         // Atualizar
         const { error: updateError } = await supabase
-          .from('user_profiles')
+          .from('profiles')
           .update(dataToSave)
-          .eq('user_id', user.id);
+          .eq('id', user.id);
 
         if (updateError) throw updateError;
       } else {
         // Inserir
         const { error: insertError } = await supabase
-          .from('user_profiles')
+          .from('profiles')
           .insert(dataToSave);
 
         if (insertError) throw insertError;

@@ -12,6 +12,30 @@ const MealsList = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Remove refeições duplicadas, mantendo apenas a mais recente de cada tipo
+   * Ex: 2 "cafés da manhã" → mantém apenas o mais recente
+   */
+  const deduplicateMeals = (allMeals: (Meal & { id: string })[]) => {
+    const mealsByType = new Map<string, Meal & { id: string }>();
+
+    // Percorrer de trás para frente (mais recentes primeiro)
+    for (let i = allMeals.length - 1; i >= 0; i--) {
+      const meal = allMeals[i];
+      const mealType = meal.type || "unknown";
+
+      // Se ainda não temos essa tipo de refeição, adicionar (é a mais recente)
+      if (!mealsByType.has(mealType)) {
+        mealsByType.set(mealType, meal);
+      }
+    }
+
+    // Retornar na ordem original (cronológica reversa)
+    return Array.from(mealsByType.values()).sort(
+      (a, b) => new Date(b.id).getTime() - new Date(a.id).getTime()
+    );
+  };
+
   useEffect(() => {
     loadMeals();
   }, []);
@@ -78,7 +102,9 @@ const MealsList = () => {
         mealsWithFoods.push(mealWithFoods);
       }
 
-      setMeals(mealsWithFoods);
+      // ✅ REMOVER DUPLICATAS: Manter apenas a refeição mais recente de cada tipo
+      const deduplicatedMeals = deduplicateMeals(mealsWithFoods);
+      setMeals(deduplicatedMeals);
     } catch (err) {
       console.error("Erro ao carregar refeições:", err);
       const errorMsg = err instanceof Error ? err.message : "Erro ao carregar refeições";
@@ -131,7 +157,15 @@ const MealsList = () => {
       ) : (
         <div className="grid gap-4">
           {meals.map((meal) => (
-            <MealDisplay key={meal.id} meal={meal} mealId={meal.id} />
+            <MealDisplay 
+              key={meal.id} 
+              meal={meal} 
+              mealId={meal.id}
+              onDelete={(deletedId) => {
+                // Remover refeição da lista
+                setMeals(meals.filter(m => m.id !== deletedId));
+              }}
+            />
           ))}
         </div>
       )}

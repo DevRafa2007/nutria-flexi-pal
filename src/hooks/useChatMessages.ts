@@ -105,12 +105,28 @@ export function useChatMessages() {
 
       if (!user) throw new Error('Usuário não autenticado');
 
-      await supabase.from('chat_messages').delete().eq('user_id', user.id);
-
+      // Primeiro limpar o estado local
       setMessages([]);
+
+      // Depois deletar do banco com tratamento robusto
+      const { error: deleteError } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error('Erro ao deletar do Supabase:', deleteError);
+        // Mesmo com erro, o estado local já foi limpo
+        throw deleteError;
+      }
+
+      console.log('✅ Chat limpo com sucesso');
     } catch (err) {
       console.error('Erro ao limpar mensagens:', err);
-      setError('Erro ao limpar histórico');
+      // Recarregar para sincronizar estado
+      await loadMessages();
+      setError('Erro ao limpar histórico. Tente novamente.');
+      throw err;
     }
   }, []);
 
