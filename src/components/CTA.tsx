@@ -25,7 +25,7 @@ const CTA = () => {
     {
       name: "Básico",
       description: "Perfeito para começar sua jornada",
-      price: 29,
+      price: 15,
       period: "mês",
       highlighted: false,
       cta: "Começar Grátis",
@@ -41,7 +41,7 @@ const CTA = () => {
     {
       name: "Pro",
       description: "O mais popular entre nossos usuários",
-      price: 79,
+      price: 25,
       period: "mês",
       highlighted: true,
       cta: "Comece Agora",
@@ -57,7 +57,7 @@ const CTA = () => {
     {
       name: "Premium",
       description: "Para resultados máximos",
-      price: 149,
+      price: 40,
       period: "mês",
       highlighted: false,
       cta: "Explorar",
