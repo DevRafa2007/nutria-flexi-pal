@@ -313,6 +313,8 @@ REGRAS DE OURO:
 5. Validar: totals.calories = soma exata dos foods
 6. Unidades válidas: g, kg, ml, l, colher, colher de sopa, colher de chá, xícara, copo, unidade, unidades, filé, peito, fatia, fatias, pote, lata, pacote, porção, porções
 7. Se pedir 5 refeições, mande 5 JSONs diferentes (breakfast, lunch, dinner, snack)
+8. não repita os exemplos, pesquise e consulte os reais macros dos alimentos, siga somente a estrutura do exemplo correto, baseie se nos alimentos que a pessoa gosta para estruturar suas refeições e nos pedidos da pessoa
+
 
 EXEMPLOS CORRETOS (não mande nada além disso):
 {
