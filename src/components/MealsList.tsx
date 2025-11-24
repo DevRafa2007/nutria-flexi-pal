@@ -3,11 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import MealDisplay from "@/components/MealDisplay";
 import { Meal } from "@/lib/types";
-import { AlertCircle, Utensils } from "lucide-react";
+import { AlertCircle, Utensils, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
-const MealsList = () => {
+interface MealsListProps {
+  onRequestTutorial?: () => void;
+}
+
+const MealsList = ({ onRequestTutorial }: MealsListProps) => {
   const [meals, setMeals] = useState<(Meal & { id: string })[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,12 +149,22 @@ const MealsList = () => {
       ) : meals.length === 0 ? (
         <Card className="bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20">
           <CardContent className="p-8 text-center">
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="text-4xl">🍽️</div>
               <h3 className="font-semibold text-lg">Nenhuma refeição ainda</h3>
               <p className="text-sm text-muted-foreground">
                 Converse com a IA na aba "Monte sua Dieta" para criar sua primeira refeição personalizada!
               </p>
+              {onRequestTutorial && (
+                <Button 
+                  onClick={onRequestTutorial}
+                  className="w-full gap-2 mt-4"
+                  variant="default"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Ver Tutorial de Refeição
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

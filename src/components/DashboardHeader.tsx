@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Menu } from "lucide-react";
 import StreakIndicator from "./StreakIndicator";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -17,10 +18,16 @@ interface DashboardHeaderProps {
 
 const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
   const navigate = useNavigate();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    // TODO: Implement logout logic
+    setIsMenuOpen(false);
     navigate("/");
+  };
+
+  const handleTabSelect = (tab: string) => {
+    onTabChange?.(tab);
+    setIsMenuOpen(false);
   };
 
   const tabs = [
@@ -70,7 +77,7 @@ const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
           </Button>
 
           {/* Mobile Menu */}
-          <Sheet>
+          <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
             <SheetTrigger asChild className="lg:hidden">
               <Button variant="ghost" size="icon">
                 <Menu className="h-5 w-5" />
@@ -86,7 +93,7 @@ const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
                     key={tab.value}
                     variant={currentTab === tab.value ? "default" : "ghost"}
                     className="justify-start w-full"
-                    onClick={() => onTabChange?.(tab.value)}
+                    onClick={() => handleTabSelect(tab.value)}
                   >
                     <span className="mr-2">{tab.icon}</span>
                     {tab.label.replace(/^[^\s]+\s/, "")}

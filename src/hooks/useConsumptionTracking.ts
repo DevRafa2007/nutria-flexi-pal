@@ -40,15 +40,21 @@ export function useConsumptionTracking() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_streak')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      setStreak(data as UserStreak);
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 = no rows returned (esperado para novo usuário)
+        throw error;
+      }
+
+      setStreak(data as UserStreak | null);
     } catch (err) {
       console.error('Erro ao carregar streak:', err);
+      setStreak(null);
     }
   }, []);
 
@@ -82,7 +88,113 @@ export function useConsumptionTracking() {
   }, []);
 
   /**
+   * Atualiza streak baseado em atividade recente
+   * Calcula corretamente a sequência de dias consecutivos com atividade
+   */
+  const updateStreak = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Buscar TODAS as datas de atividade dos últimos 90 dias (ordenadas)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 90);
+
+      const { data: consumptionsData } = await supabase
+        .from('daily_consumption')
+        .select('consumed_date')
+        .eq('user_id', user.id)
+        .gte('consumed_date', startDate.toISOString().split('T')[0])
+        .order('consumed_date', { ascending: true });
+
+      // Obter datas únicas e ordenadas
+      const activeDates = new Set(
+        (consumptionsData || [])
+          .map(c => new Date(c.consumed_date).toISOString().split('T')[0])
+      );
+
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      let newStreak = 0;
+      let newBestStreak = streak?.best_streak || 0;
+
+      // Calcular streak atual: contar dias consecutivos até hoje/ontem
+      if (activeDates.has(today) || activeDates.has(yesterdayStr)) {
+        // Começar do hoje ou ontem e contar para trás
+        const startFrom = activeDates.has(today) ? today : yesterdayStr;
+
+        // Contar sequência de dias consecutivos
+        let currentDate = new Date(startFrom);
+        newStreak = 1;
+
+        for (let i = 1; i < 365; i++) {
+          currentDate.setDate(currentDate.getDate() - 1);
+          const checkDate = currentDate.toISOString().split('T')[0];
+
+          if (activeDates.has(checkDate)) {
+            newStreak++;
+          } else {
+            break; // Para ao encontrar primeiro dia sem atividade
+          }
+        }
+      }
+
+      newBestStreak = Math.max(newStreak, newBestStreak);
+
+      // Buscar registro existente
+      const { data: existingStreak } = await supabase
+        .from('user_streak')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      const streakData = {
+        user_id: user.id,
+        current_streak: newStreak,
+        best_streak: newBestStreak,
+        last_activity_date: Array.from(activeDates).pop() || null, // Última data com atividade
+        start_date: streak?.start_date || today,
+        updated_at: new Date().toISOString(),
+      };
+
+      let updateData;
+
+      if (existingStreak) {
+        // Atualizar registro existente
+        const { data } = await supabase
+          .from('user_streak')
+          .update(streakData)
+          .eq('user_id', user.id)
+          .select()
+          .single();
+        updateData = data;
+      } else {
+        // Criar novo registro
+        const { data } = await supabase
+          .from('user_streak')
+          .insert({
+            ...streakData,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        updateData = data;
+      }
+
+      setStreak(updateData as UserStreak);
+    } catch (err) {
+      console.error('Erro ao atualizar streak:', err);
+    }
+  }, [streak]);
+
+  /**
    * Marca refeição como consumida
+   * Evita duplicação ao verificar se já existe registro
    */
   const markMealConsumed = useCallback(
     async (mealId: string, macrosMet: number = 100) => {
@@ -94,19 +206,39 @@ export function useConsumptionTracking() {
 
         const today = new Date().toISOString().split('T')[0];
 
-        const { error } = await supabase
+        // Verificar se já existe consumo deste prato hoje
+        const { data: existingConsumption } = await supabase
           .from('daily_consumption')
-          .insert({
-            user_id: user.id,
-            meal_id: mealId,
-            consumed_date: today,
-            macros_met: macrosMet,
-            streak_active: true,
-          });
+          .select('id, macros_met')
+          .eq('user_id', user.id)
+          .eq('meal_id', mealId)
+          .eq('consumed_date', today)
+          .single();
 
-        if (error) throw error;
+        if (existingConsumption) {
+          // Já foi consumido hoje, apenas atualizar macros_met se necessário
+          const { error } = await supabase
+            .from('daily_consumption')
+            .update({ macros_met: Math.max(macrosMet, existingConsumption.macros_met || 100) })
+            .eq('id', existingConsumption.id);
 
-        // Atualizar streak
+          if (error) throw error;
+        } else {
+          // Novo consumo, inserir registro
+          const { error } = await supabase
+            .from('daily_consumption')
+            .insert({
+              user_id: user.id,
+              meal_id: mealId,
+              consumed_date: today,
+              macros_met: macrosMet,
+              streak_active: true,
+            });
+
+          if (error) throw error;
+        }
+
+        // Atualizar streak com base em TODAS as atividades
         await updateStreak();
         await loadConsumptions();
       } catch (err) {
@@ -115,66 +247,6 @@ export function useConsumptionTracking() {
     },
     [loadConsumptions]
   );
-
-  /**
-   * Atualiza streak baseado em atividade recente
-   */
-  const updateStreak = useCallback(async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Buscar última atividade
-      const { data: lastConsumption } = await supabase
-        .from('daily_consumption')
-        .select('consumed_date')
-        .eq('user_id', user.id)
-        .order('consumed_date', { ascending: false })
-        .limit(1)
-        .single();
-
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      const lastDate = lastConsumption
-        ? new Date(lastConsumption.consumed_date)
-        : null;
-
-      let newStreak = streak?.current_streak || 0;
-      let newBestStreak = streak?.best_streak || 0;
-
-      // Se teve atividade hoje ou ontem, continua streak
-      if (
-        lastDate &&
-        (lastDate.toDateString() === today.toDateString() ||
-          lastDate.toDateString() === yesterday.toDateString())
-      ) {
-        newStreak = (streak?.current_streak || 0) + 1;
-        newBestStreak = Math.max(newStreak, streak?.best_streak || 0);
-      } else {
-        newStreak = 0; // Reset streak se pulou dia
-      }
-
-      const { data } = await supabase
-        .from('user_streak')
-        .upsert({
-          user_id: user.id,
-          current_streak: newStreak,
-          best_streak: newBestStreak,
-          last_activity_date: today.toISOString().split('T')[0],
-          start_date: streak?.start_date || today.toISOString().split('T')[0],
-        })
-        .select()
-        .single();
-
-      setStreak(data as UserStreak);
-    } catch (err) {
-      console.error('Erro ao atualizar streak:', err);
-    }
-  }, [streak]);
 
   /**
    * Obtém consumos de um dia específico

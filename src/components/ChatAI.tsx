@@ -12,9 +12,10 @@ import { supabase } from "@/lib/supabaseClient";
 
 interface ChatInterfaceProps {
   onMealGenerated?: (meal: Meal) => void;
+  fullscreen?: boolean;
 }
 
-const ChatAI = ({ onMealGenerated }: ChatInterfaceProps) => {
+const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => {
   const { profile } = useUserProfile();
   const { messages, addMessage, clearMessages, isLoading: messagesLoading } = useChatMessages();
   const [input, setInput] = useState("");
@@ -321,6 +322,133 @@ Ver detalhes em "Minhas Refeições" 👉`;
     },
   ] : messages;
 
+  // Modo fullscreen (como WhatsApp)
+  if (fullscreen) {
+    return (
+      <div className="flex flex-col h-full w-full bg-gradient-to-b from-background to-muted/20 overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary via-primary/80 to-primary/60 text-primary-foreground p-4 border-b flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-primary-foreground/20 flex items-center justify-center animate-pulse">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-lg font-bold">myNutrIA</div>
+                <div className="text-xs opacity-90">Assistente de Nutrição</div>
+              </div>
+            </div>
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearChat}
+                className="text-primary-foreground hover:bg-primary-foreground/20"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 w-full">
+          {messagesLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Sparkles className="w-8 h-8 text-primary animate-spin" />
+                <p className="text-muted-foreground">Carregando histórico...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {displayMessages.map((message, idx) => (
+                <div
+                  key={idx}
+                  className={`flex gap-3 animate-in fade-in ${
+                    message.role === "user" ? "justify-end" : ""
+                  }`}
+                >
+                  {message.role === "assistant" && (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0">
+                      <Sparkles className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                  )}
+                  <div
+                    className={`rounded-2xl p-3 max-w-[85%] text-sm transition-all ${
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                        : "bg-muted rounded-tl-sm"
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap leading-relaxed">
+                      {message.content}
+                    </div>
+                  </div>
+                  {message.role === "user" && (
+                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-secondary-foreground" />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {isLoading && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-primary-foreground animate-pulse" />
+                  </div>
+                  <div className="bg-muted rounded-2xl rounded-tl-sm p-3">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" />
+                      <div
+                        className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      />
+                      <div
+                        className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </>
+          )}
+        </div>
+
+        {/* Input area */}
+        <div className="border-t bg-background p-3 sm:p-4 flex-shrink-0">
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && !isLoading && handleSend()}
+              placeholder="Digite sua mensagem..."
+              disabled={isLoading}
+              className="flex-1 rounded-full border-primary/30"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
+              size="icon"
+            >
+              {isLoading ? (
+                <Sparkles className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Modo card (padrão)
   return (
     <div className="w-full max-w-2xl mx-auto">
       <Card className="shadow-lg border border-primary/20">
