@@ -33,7 +33,7 @@ interface MealDisplayProps {
 }
 
 const MealDisplay = ({ meal, mealId, onUpdate, onDelete }: MealDisplayProps) => {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [selectedUnits, setSelectedUnits] = useState<Record<string, MeasurementUnit>>(
     meal.foods.reduce((acc, food, idx) => {
       acc[idx] = food.unit;

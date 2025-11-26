@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Send, Sparkles, User, AlertCircle, Trash2 } from "lucide-react";
+import { Send, Sparkles, User, AlertCircle, Trash2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { sendMessageToGroq, NUTRITION_SYSTEM_PROMPT, parseNutritionPlan } from "@/lib/groqClient";
 import { ChatMessage, Meal } from "@/lib/types";
 import useChatMessages from "@/hooks/useChatMessages";
 import useUserProfile from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
+import { formatMessageForDisplay, generateActionSummary, processAssistantMessage } from "@/lib/messageFormatter";
 
 interface ChatInterfaceProps {
   onMealGenerated?: (meal: Meal) => void;
@@ -81,7 +82,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   /**
    * Salva refeição no banco de dados
    */
-  const saveMealToDatabase = async (meal: Meal) => {
+  const saveMealToDatabase = async (meal: Meal): Promise<boolean> => {
     try {
       // Validar refeição
       if (!meal.name || meal.name.trim() === '') {
@@ -123,7 +124,12 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
         .select()
         .single();
 
-      if (mealError) throw mealError;
+      console.log('[saveMealToDatabase] Insert meal result:', { mealData, mealError });
+
+      if (mealError || !mealData?.id) {
+        console.error('[saveMealToDatabase] Falha ao inserir meal:', mealError);
+        throw mealError || new Error('Meal insert failed');
+      }
 
       // Validar e salvar alimentos
       const foodsToInsert = meal.foods
@@ -145,17 +151,42 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
         return;
       }
 
-      const { error: foodsError } = await supabase
+      const { data: foodsInserted, error: foodsError } = await supabase
         .from("meal_foods")
-        .insert(foodsToInsert);
+        .insert(foodsToInsert)
+        .select();
 
-      if (foodsError) throw foodsError;
+      console.log('[saveMealToDatabase] Insert meal_foods result:', { foodsInserted, foodsError });
+
+      if (foodsError) {
+        // Tentar rollback: deletar a meal criada para manter consistência
+        try {
+          await supabase.from('meal_foods').delete().eq('meal_id', mealData.id);
+          await supabase.from('meals').delete().eq('id', mealData.id);
+        } catch (rbErr) {
+          console.error('[saveMealToDatabase] Erro no rollback após falha em meal_foods:', rbErr);
+        }
+        throw foodsError;
+      }
+
+      // Verificar se os alimentos foram realmente inseridos
+      if (!Array.isArray(foodsInserted) || foodsInserted.length === 0) {
+        console.warn('[saveMealToDatabase] Nenhum food inserido retornado, verificando manualmente...');
+        const { data: verifyFoods } = await supabase.from('meal_foods').select('*').eq('meal_id', mealData.id).limit(1);
+        if (!verifyFoods || verifyFoods.length === 0) {
+          // rollback
+          await supabase.from('meals').delete().eq('id', mealData.id);
+          throw new Error('Falha ao inserir alimentos da refeição');
+        }
+      }
 
       toast.success(`✅ "${meal.name}" salva em Minhas Refeições!`);
       if (onMealGenerated) onMealGenerated(meal);
+      return true;
     } catch (err) {
       console.error("Erro ao salvar refeição:", err);
       toast.error("Erro ao salvar refeição");
+      return false;
     }
   };
 
@@ -211,81 +242,97 @@ ${previousMealsContext}`;
 
       // DEBUG: Mostrar resposta bruta
       console.log("🤖 Groq Response (raw):", response.substring(0, 500));
-      
-      // Tenta extrair MÚLTIPLAS refeições no JSON
-      const parsedMeals = parseNutritionPlan(response);
-      
-      // DEBUG: Mostrar resultado do parsing
-      console.log("📊 Parsed Meals:", parsedMeals?.length || 0, "refeições encontradas");
 
+      // Primeiro, analisar a mensagem para detectar JSON/metadata
+      const processed = processAssistantMessage(response);
+      const { displayContent, metadata } = processed;
+
+      // Tenta extrair refeições via parser (caso a string contenha JSON arrays/objetos com refeições)
+      let parsedMeals = parseNutritionPlan(response);
+
+      // Se parser não encontrou nada, mas metadata indica JSON, tente parsear o json bruto
+      if ((!parsedMeals || parsedMeals.length === 0) && metadata.hasJSON && metadata.jsonContent) {
+        try {
+          // O JSON pode representar uma única refeição ou um array
+          const raw = metadata.jsonContent;
+          if (Array.isArray(raw)) {
+            parsedMeals = raw;
+          } else if (raw && typeof raw === 'object') {
+            parsedMeals = [raw];
+          }
+        } catch (err) {
+          console.warn('Não foi possível converter metadata.jsonContent em refeições', err);
+        }
+      }
+
+      // Se encontramos refeições no JSON, salvamos todas e não gravamos o JSON no chat
       if (parsedMeals && parsedMeals.length > 0) {
-        // Salvar TODAS as refeições encontradas
         let savedCount = 0;
-        
+        const savedMealsSummaries: string[] = [];
+
         for (const parsedMeal of parsedMeals) {
-          // Validar refeição
-          if (!parsedMeal.foods?.length || !parsedMeal.totals?.calories || parsedMeal.totals.calories < 50) {
-            console.warn("⚠️ Refeição inválida, pulando:", parsedMeal.name);
+          if (!parsedMeal || !parsedMeal.foods || parsedMeal.foods.length === 0) {
+            console.warn('Refeição ignorada (sem alimentos)', parsedMeal);
             continue;
           }
 
           const meal: Meal = {
-            name: parsedMeal.name || "Refeição gerada",
-            description: parsedMeal.description || "",
-            type: parsedMeal.meal_type || "breakfast",
+            name: parsedMeal.name || 'Refeição gerada',
+            description: parsedMeal.description || '',
+            type: parsedMeal.meal_type || parsedMeal.type || 'breakfast',
             foods: parsedMeal.foods.map((f: any) => ({
               name: f.name,
-              quantity: f.quantity,
-              unit: f.unit,
+              quantity: f.quantity || 0,
+              unit: f.unit || 'g',
               macros: {
                 protein: f.protein || 0,
                 carbs: f.carbs || 0,
                 fat: f.fat || 0,
                 calories: f.calories || 0,
               },
-              notes: f.notes || "",
+              notes: f.notes || '',
             })),
             totalMacros: {
-              protein: parsedMeal.totals?.protein || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.protein || 0), 0),
-              carbs: parsedMeal.totals?.carbs || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.carbs || 0), 0),
-              fat: parsedMeal.totals?.fat || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.fat || 0), 0),
-              calories: parsedMeal.totals?.calories || parsedMeal.foods.reduce((sum: number, f: any) => sum + (f.calories || 0), 0),
+              protein: parsedMeal.totals?.protein || parsedMeal.foods.reduce((s: number, f: any) => s + (f.protein || 0), 0),
+              carbs: parsedMeal.totals?.carbs || parsedMeal.foods.reduce((s: number, f: any) => s + (f.carbs || 0), 0),
+              fat: parsedMeal.totals?.fat || parsedMeal.foods.reduce((s: number, f: any) => s + (f.fat || 0), 0),
+              calories: parsedMeal.totals?.calories || parsedMeal.foods.reduce((s: number, f: any) => s + (f.calories || 0), 0),
             },
           };
 
-          // Salvar refeição
           try {
-            await saveMealToDatabase(meal);
-            savedCount++;
-            console.log(`✅ Refeição "${meal.name}" salva (${savedCount}/${parsedMeals.length})`);
-          } catch (error) {
-            console.error(`❌ Erro ao salvar "${meal.name}":`, error);
+            const ok = await saveMealToDatabase(meal);
+            if (ok) {
+              savedCount++;
+              savedMealsSummaries.push(`${meal.name} (${Math.round(meal.totalMacros.calories)} kcal)`);
+              console.log(`✅ Refeição "${meal.name}" salva (${savedCount}/${parsedMeals.length})`);
+            } else {
+              console.warn(`Refeição "${meal.name}" não foi salva.`);
+            }
+          } catch (err) {
+            console.error('Erro ao salvar refeição:', err);
           }
         }
 
-        // Mostrar mensagem de resumo
-        let responseWithoutJSON = response
-          .replace(/```json[\s\S]*?```/g, "")
-          .replace(/\{[\s\S]*?\}/g, "")
-          .trim()
-          .split('\n')
-          .filter(line => line.trim() !== '')
-          .join('\n');
+        // Gerar mensagem amigável para o chat
+        let friendly = '';
+        if (savedMealsSummaries.length === 1) {
+          friendly = `✅ Pronto — criei sua refeição: ${savedMealsSummaries[0]}. Ela está disponível em "Minhas Refeições".`;
+        } else if (savedMealsSummaries.length > 1) {
+          friendly = `✅ Criei ${savedMealsSummaries.length} refeições:
+${savedMealsSummaries.map(s => `- ${s}`).join('\n')}
 
-        if (!responseWithoutJSON || responseWithoutJSON.length < 10) {
-          responseWithoutJSON = `
-✅ ${savedCount} refeição(ões) criada(s) com sucesso!
-
-� Refeições adicionadas:
-${parsedMeals.slice(0, savedCount).map(m => `- ${m.name}: ${Math.round(m.totals?.calories || 0)}kcal`).join('\n')}
-
-Ver detalhes em "Minhas Refeições" 👉`;
+Todas estão em "Minhas Refeições".`;
+        } else {
+          friendly = '✅ Refeição(s) processada(s), verifique Minhas Refeições.';
         }
 
-        await addMessage("assistant", responseWithoutJSON);
+        await addMessage('assistant', friendly);
       } else {
-        // Se for apenas conversa, mostrar normalmente
-        await addMessage("assistant", response);
+        // Nenhuma refeição encontrada: salvar apenas a versão limpa da mensagem
+        // `displayContent` já remove JSON/códigos e deixa texto amigável
+        const clean = displayContent && displayContent.length > 0 ? displayContent : 'Resposta recebida.';
+        await addMessage('assistant', clean);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Erro ao comunicar com a IA";
@@ -362,7 +409,11 @@ Ver detalhes em "Minhas Refeições" 👉`;
             </div>
           ) : (
             <>
-              {displayMessages.map((message, idx) => (
+              {displayMessages.map((message, idx) => {
+                const displayContent = formatMessageForDisplay(message.role, message.content);
+                const actionSummary = message.role === "assistant" ? generateActionSummary(processAssistantMessage(message.content).metadata) : "";
+                
+                return (
                 <div
                   key={idx}
                   className={`flex gap-3 animate-in fade-in ${
@@ -381,8 +432,14 @@ Ver detalhes em "Minhas Refeições" 👉`;
                         : "bg-muted rounded-tl-sm"
                     }`}
                   >
+                    {actionSummary && (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {actionSummary}
+                      </div>
+                    )}
                     <div className="whitespace-pre-wrap leading-relaxed">
-                      {message.content}
+                      {displayContent}
                     </div>
                   </div>
                   {message.role === "user" && (
@@ -391,7 +448,8 @@ Ver detalhes em "Minhas Refeições" 👉`;
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               {isLoading && (
                 <div className="flex gap-3">
@@ -501,7 +559,11 @@ Ver detalhes em "Minhas Refeições" 👉`;
             <>
               {/* Chat messages */}
               <div className="h-[500px] overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-transparent to-muted/20">
-                {displayMessages.map((message, idx) => (
+                {displayMessages.map((message, idx) => {
+                  const displayContent = formatMessageForDisplay(message.role, message.content);
+                  const actionSummary = message.role === "assistant" ? generateActionSummary(processAssistantMessage(message.content).metadata) : "";
+                  
+                  return (
                   <div
                     key={idx}
                     className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 ${
@@ -520,8 +582,14 @@ Ver detalhes em "Minhas Refeições" 👉`;
                           : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
                       }`}
                     >
+                      {actionSummary && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {actionSummary}
+                        </div>
+                      )}
                       <div className="whitespace-pre-wrap font-medium leading-relaxed">
-                        {message.content}
+                        {displayContent}
                       </div>
                       {message.timestamp && (
                         <div className={`text-xs mt-2 opacity-60 font-normal`}>
@@ -538,7 +606,8 @@ Ver detalhes em "Minhas Refeições" 👉`;
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {isLoading && (
                   <div className="flex gap-3 animate-in fade-in">

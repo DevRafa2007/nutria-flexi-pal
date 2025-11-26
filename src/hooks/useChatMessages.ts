@@ -17,7 +17,7 @@ export function useChatMessages() {
   }, []);
 
   /**
-   * Carrega todas as mensagens do usuário
+   * Carrega todas as mensagens do usuário (que não foram deletadas)
    */
   const loadMessages = async () => {
     try {
@@ -31,13 +31,48 @@ export function useChatMessages() {
         return;
       }
 
-      const { data, error: fetchError } = await supabase
+      // Buscar apenas mensagens NÃO deletadas (deleted_at IS NULL)
+      const query = supabase
         .from('chat_messages')
         .select('*')
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
-      if (fetchError) throw fetchError;
+      // Executar query e capturar resultado
+      let data: any = null;
+      let fetchError: any = null;
+
+      try {
+        const res = await query;
+        data = (res as any).data;
+        fetchError = (res as any).error;
+      } catch (err) {
+        fetchError = err;
+      }
+
+      // Se houve erro (ex: coluna deleted_at não existe), tentar fallback sem o filtro `.is`
+      if (fetchError) {
+        console.warn('[useChatMessages] Erro na query com .is filter, tentando fallback:', fetchError);
+        try {
+          const res2 = await supabase
+            .from('chat_messages')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: true });
+
+          data = (res2 as any).data;
+          fetchError = (res2 as any).error;
+
+          if (fetchError) {
+            console.error('[useChatMessages] Fallback também falhou:', fetchError);
+            throw fetchError;
+          }
+        } catch (err2) {
+          console.error('[useChatMessages] Fallback falhou com erro:', err2);
+          throw err2;
+        }
+      }
 
       // Converter para ChatMessage[]
       const chatMessages: ChatMessage[] = (data || []).map((msg) => ({
@@ -95,7 +130,8 @@ export function useChatMessages() {
   );
 
   /**
-   * Limpa todas as mensagens (usuário decidiu resetar)
+   * Limpa todas as mensagens (soft delete - marca como deletada com timestamp)
+   * Mantém dados no banco para auditoria, mas não carrega mais
    */
   const clearMessages = useCallback(async () => {
     try {
@@ -105,26 +141,47 @@ export function useChatMessages() {
 
       if (!user) throw new Error('Usuário não autenticado');
 
-      // Primeiro limpar o estado local
-      setMessages([]);
+      console.log('[useChatMessages] Iniciando limpeza de mensagens');
 
-      // Depois deletar do banco com tratamento robusto
-      const { error: deleteError } = await supabase
+      // Soft delete: marcar como deletada com timestamp
+      const { error: updateError } = await supabase
         .from('chat_messages')
-        .delete()
-        .eq('user_id', user.id);
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .is('deleted_at', null); // Apenas atualizar as que não foram deletadas ainda
 
-      if (deleteError) {
-        console.error('Erro ao deletar do Supabase:', deleteError);
-        // Mesmo com erro, o estado local já foi limpo
-        throw deleteError;
+      if (updateError) {
+        console.warn('[useChatMessages] Erro ao marcar como deletadas:', updateError);
+
+        // Se a coluna `deleted_at` não existe no schema do Supabase (PGRST204), fazer fallback para hard delete
+        const isMissingDeletedAt =
+          (updateError && (updateError.code === 'PGRST204' || /deleted_at/.test(updateError.message || '')));
+
+        if (isMissingDeletedAt) {
+          console.log('[useChatMessages] Coluna deleted_at não encontrada — realizando hard delete como fallback');
+          const { error: deleteError } = await supabase
+            .from('chat_messages')
+            .delete()
+            .eq('user_id', user.id);
+
+          if (deleteError) {
+            console.error('[useChatMessages] Hard delete também falhou:', deleteError);
+            throw deleteError;
+          }
+        } else {
+          throw updateError;
+        }
       }
+
+      console.log('[useChatMessages] Mensagens marcadas como deletadas no banco');
+
+      // Limpar estado local DEPOIS que confirmou no banco
+      setMessages([]);
+      setError(null);
 
       console.log('✅ Chat limpo com sucesso');
     } catch (err) {
       console.error('Erro ao limpar mensagens:', err);
-      // Recarregar para sincronizar estado
-      await loadMessages();
       setError('Erro ao limpar histórico. Tente novamente.');
       throw err;
     }
