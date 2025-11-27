@@ -14,6 +14,7 @@ export interface UserProfile {
   dietary_restrictions?: string[];
   preferred_foods?: string[];
   disliked_foods?: string[];
+  meals_per_day?: number; // 3, 4, 5, ou 6 refeições diárias
   tdee?: number;
   target_calories?: number;
   target_protein?: number;

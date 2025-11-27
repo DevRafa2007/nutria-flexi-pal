@@ -44,6 +44,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
   /**
    * Carrega refeições do usuário do banco de dados
+   * MELHORADO: Carrega TODAS as refeições com IDs para a IA ter contexto completo
    */
   const loadUserMeals = async (): Promise<string> => {
     try {
@@ -53,24 +54,57 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       if (!user) return "";
 
-      // ⚠️ OTIMIZAÇÃO: Buscar apenas últimas 5 refeições (não 10) para economizar tokens
+      // Carregar TODAS as refeições do usuário (não apenas 5)
       const { data: meals, error } = await supabase
         .from("meals")
-        .select("*, meal_foods(*)")
+        .select("id, name, description, meal_type, created_at, meal_foods(*)")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
+        .order("created_at", { ascending: false });
 
       if (error || !meals?.length) return "";
 
-      // ⚠️ OTIMIZAÇÃO: Formato comprimido de refeições para economizar tokens
-      let mealsContext = "\n\nÚltimas refeições:\n";
+      // Agrupar refeições por tipo
+      const groupedMeals: Record<string, any[]> = {
+        breakfast: [],
+        lunch: [],
+        snack: [],
+        dinner: []
+      };
+
       meals.forEach((meal: any) => {
-        const totalCals = meal.meal_foods.reduce((sum: number, f: any) => sum + (f.calories || 0), 0);
-        const totalProt = meal.meal_foods.reduce((sum: number, f: any) => sum + (f.protein || 0), 0);
-        const foods = meal.meal_foods.map((f: any) => `${f.quantity}${f.unit} ${f.food_name}`).join(', ');
-        mealsContext += `- ${meal.name}: ${foods} | ${totalCals}kcal, ${totalProt}g prot\n`;
+        const type = meal.meal_type || 'snack';
+        if (!groupedMeals[type]) groupedMeals[type] = [];
+        groupedMeals[type].push(meal);
       });
+
+      // Formatar para contexto da IA
+      let mealsContext = "\n\n🍽️ REFEIÇÕES JÁ CRIADAS (para referência e edição):\n";
+
+      const typeNames: Record<string, string> = {
+        breakfast: 'Café da Manhã',
+        lunch: 'Almoço',
+        snack: 'Lanche',
+        dinner: 'Jantar'
+      };
+
+      for (const [type, typeMeals] of Object.entries(groupedMeals)) {
+        if (typeMeals.length > 0) {
+          mealsContext += `\n${typeNames[type]}:\n`;
+          typeMeals.forEach((meal: any) => {
+            const totalCals = meal.meal_foods?.reduce((sum: number, f: any) => sum + (f.calories || 0), 0) || 0;
+            const totalProt = meal.meal_foods?.reduce((sum: number, f: any) => sum + (f.protein || 0), 0) || 0;
+            const totalCarbs = meal.meal_foods?.reduce((sum: number, f: any) => sum + (f.carbs || 0), 0) || 0;
+            const totalFat = meal.meal_foods?.reduce((sum: number, f: any) => sum + (f.fat || 0), 0) || 0;
+
+            mealsContext += `  [ID: ${meal.id}] ${meal.name}`;
+            if (meal.description) mealsContext += ` - ${meal.description}`;
+            mealsContext += `\n    Macros: ${Math.round(totalCals)}kcal | ${Math.round(totalProt)}g prot | ${Math.round(totalCarbs)}g carb | ${Math.round(totalFat)}g gord\n`;
+          });
+        }
+      }
+
+      mealsContext += `\n✏️ Para EDITAR uma refeição: "edita o [ID: xxx]" ou "muda a refeição [nome]"\n`;
+      mealsContext += `📋 Para CRIAR novas: "cria X refeições" ou "faz um plano do dia"\n`;
 
       return mealsContext;
     } catch (err) {
@@ -210,7 +244,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
       const MAX_HISTORY = 8;
       const allMessages = [...messages, { role: "user" as const, content: userMessage }];
       const messagesToSend = allMessages.slice(-MAX_HISTORY);
-      
+
       const groqMessages = messagesToSend.map(
         (msg) => ({
           role: msg.role as "user" | "assistant",
@@ -220,7 +254,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       // Adicionar informações do perfil ao contexto se disponível
       let enhancedPrompt = NUTRITION_SYSTEM_PROMPT;
-      
+
       if (profile) {
         // ⚠️ OTIMIZAÇÃO: Formato comprimido do perfil para economizar tokens
         enhancedPrompt += `\n\n📋 PERFIL:
@@ -412,42 +446,40 @@ Todas estão em "Minhas Refeições".`;
               {displayMessages.map((message, idx) => {
                 const displayContent = formatMessageForDisplay(message.role, message.content);
                 const actionSummary = message.role === "assistant" ? generateActionSummary(processAssistantMessage(message.content).metadata) : "";
-                
+
                 return (
-                <div
-                  key={idx}
-                  className={`flex gap-3 animate-in fade-in ${
-                    message.role === "user" ? "justify-end" : ""
-                  }`}
-                >
-                  {message.role === "assistant" && (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0">
-                      <Sparkles className="w-4 h-4 text-primary-foreground" />
-                    </div>
-                  )}
                   <div
-                    className={`rounded-2xl p-3 max-w-[85%] text-sm transition-all ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-tr-sm"
-                        : "bg-muted rounded-tl-sm"
-                    }`}
+                    key={idx}
+                    className={`flex gap-3 animate-in fade-in ${message.role === "user" ? "justify-end" : ""
+                      }`}
                   >
-                    {actionSummary && (
-                      <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
-                        <CheckCircle2 className="w-3 h-3" />
-                        {actionSummary}
+                    {message.role === "assistant" && (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-4 h-4 text-primary-foreground" />
                       </div>
                     )}
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {displayContent}
+                    <div
+                      className={`rounded-2xl p-3 max-w-[85%] text-sm transition-all ${message.role === "user"
+                          ? "bg-primary text-primary-foreground rounded-tr-sm"
+                          : "bg-muted rounded-tl-sm"
+                        }`}
+                    >
+                      {actionSummary && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {actionSummary}
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap leading-relaxed">
+                        {displayContent}
+                      </div>
                     </div>
+                    {message.role === "user" && (
+                      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-secondary-foreground" />
+                      </div>
+                    )}
                   </div>
-                  {message.role === "user" && (
-                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-secondary-foreground" />
-                    </div>
-                  )}
-                </div>
                 );
               })}
 
@@ -562,50 +594,48 @@ Todas estão em "Minhas Refeições".`;
                 {displayMessages.map((message, idx) => {
                   const displayContent = formatMessageForDisplay(message.role, message.content);
                   const actionSummary = message.role === "assistant" ? generateActionSummary(processAssistantMessage(message.content).metadata) : "";
-                  
+
                   return (
-                  <div
-                    key={idx}
-                    className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 ${
-                      message.role === "user" ? "justify-end" : ""
-                    }`}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0 shadow-md">
-                        <Sparkles className="w-4 h-4 text-primary-foreground" />
-                      </div>
-                    )}
                     <div
-                      className={`rounded-2xl p-4 max-w-[80%] text-sm font-medium transition-all ${
-                        message.role === "user"
-                          ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
-                          : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
-                      }`}
+                      key={idx}
+                      className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 ${message.role === "user" ? "justify-end" : ""
+                        }`}
                     >
-                      {actionSummary && (
-                        <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {actionSummary}
+                      {message.role === "assistant" && (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0 shadow-md">
+                          <Sparkles className="w-4 h-4 text-primary-foreground" />
                         </div>
                       )}
-                      <div className="whitespace-pre-wrap font-medium leading-relaxed">
-                        {displayContent}
+                      <div
+                        className={`rounded-2xl p-4 max-w-[80%] text-sm font-medium transition-all ${message.role === "user"
+                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
+                            : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
+                          }`}
+                      >
+                        {actionSummary && (
+                          <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
+                            <CheckCircle2 className="w-3 h-3" />
+                            {actionSummary}
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap font-medium leading-relaxed">
+                          {displayContent}
+                        </div>
+                        {message.timestamp && (
+                          <div className={`text-xs mt-2 opacity-60 font-normal`}>
+                            {new Date(message.timestamp).toLocaleTimeString("pt-BR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        )}
                       </div>
-                      {message.timestamp && (
-                        <div className={`text-xs mt-2 opacity-60 font-normal`}>
-                          {new Date(message.timestamp).toLocaleTimeString("pt-BR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                      {message.role === "user" && (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-secondary/80 flex items-center justify-center flex-shrink-0 shadow-md">
+                          <User className="w-4 h-4 text-secondary-foreground" />
                         </div>
                       )}
                     </div>
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-secondary/80 flex items-center justify-center flex-shrink-0 shadow-md">
-                        <User className="w-4 h-4 text-secondary-foreground" />
-                      </div>
-                    )}
-                  </div>
                   );
                 })}
 

@@ -34,7 +34,7 @@ const ProfileForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validações básicas
     if (!formData.weight || !formData.height || !formData.age || !formData.gender) {
       toast.error("Preencha os campos obrigatórios (peso, altura, idade, sexo)");
@@ -52,11 +52,11 @@ const ProfileForm = () => {
   const addItem = (type: 'restrictions' | 'preferred' | 'disliked', value: string) => {
     if (!value.trim()) return;
 
-    const key = type === 'restrictions' 
-      ? 'dietary_restrictions' 
-      : type === 'preferred' 
-      ? 'preferred_foods' 
-      : 'disliked_foods';
+    const key = type === 'restrictions'
+      ? 'dietary_restrictions'
+      : type === 'preferred'
+        ? 'preferred_foods'
+        : 'disliked_foods';
 
     const currentArray = formData[key] || [];
     setFormData({
@@ -71,11 +71,11 @@ const ProfileForm = () => {
   };
 
   const removeItem = (type: 'restrictions' | 'preferred' | 'disliked', index: number) => {
-    const key = type === 'restrictions' 
-      ? 'dietary_restrictions' 
-      : type === 'preferred' 
-      ? 'preferred_foods' 
-      : 'disliked_foods';
+    const key = type === 'restrictions'
+      ? 'dietary_restrictions'
+      : type === 'preferred'
+        ? 'preferred_foods'
+        : 'disliked_foods';
 
     const currentArray = formData[key] || [];
     setFormData({
@@ -255,6 +255,27 @@ const ProfileForm = () => {
                 <SelectItem value="very_active">Muito Ativo (atleta)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="meals_per_day">Refeições por Dia</Label>
+            <Select
+              value={formData.meals_per_day?.toString() || "4"}
+              onValueChange={(value) => setFormData({ ...formData, meals_per_day: parseInt(value) })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione quantas refeições" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">3 refeições (Café, Almoço, Jantar)</SelectItem>
+                <SelectItem value="4">4 refeições (+ 1 lanche)</SelectItem>
+                <SelectItem value="5">5 refeições (+ 2 lanches)</SelectItem>
+                <SelectItem value="6">6 refeições (+ 3 lanches)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              A IA usará isso para distribuir seus macros de forma balanceada
+            </p>
           </div>
         </CardContent>
       </Card>

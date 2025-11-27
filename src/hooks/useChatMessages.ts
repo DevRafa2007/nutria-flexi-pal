@@ -130,8 +130,8 @@ export function useChatMessages() {
   );
 
   /**
-   * Limpa todas as mensagens (soft delete - marca como deletada com timestamp)
-   * Mantém dados no banco para auditoria, mas não carrega mais
+   * Limpa todas as mensagens (Hard Delete)
+   * Remove permanentemente do banco de dados
    */
   const clearMessages = useCallback(async () => {
     try {
@@ -141,41 +141,22 @@ export function useChatMessages() {
 
       if (!user) throw new Error('Usuário não autenticado');
 
-      console.log('[useChatMessages] Iniciando limpeza de mensagens');
+      console.log('[useChatMessages] Iniciando limpeza de mensagens (Hard Delete)');
 
-      // Soft delete: marcar como deletada com timestamp
-      const { error: updateError } = await supabase
+      // Hard delete: remover permanentemente
+      const { error: deleteError } = await supabase
         .from('chat_messages')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .is('deleted_at', null); // Apenas atualizar as que não foram deletadas ainda
+        .delete()
+        .eq('user_id', user.id);
 
-      if (updateError) {
-        console.warn('[useChatMessages] Erro ao marcar como deletadas:', updateError);
-
-        // Se a coluna `deleted_at` não existe no schema do Supabase (PGRST204), fazer fallback para hard delete
-        const isMissingDeletedAt =
-          (updateError && (updateError.code === 'PGRST204' || /deleted_at/.test(updateError.message || '')));
-
-        if (isMissingDeletedAt) {
-          console.log('[useChatMessages] Coluna deleted_at não encontrada — realizando hard delete como fallback');
-          const { error: deleteError } = await supabase
-            .from('chat_messages')
-            .delete()
-            .eq('user_id', user.id);
-
-          if (deleteError) {
-            console.error('[useChatMessages] Hard delete também falhou:', deleteError);
-            throw deleteError;
-          }
-        } else {
-          throw updateError;
-        }
+      if (deleteError) {
+        console.error('[useChatMessages] Erro ao deletar mensagens:', deleteError);
+        throw deleteError;
       }
 
-      console.log('[useChatMessages] Mensagens marcadas como deletadas no banco');
+      console.log('[useChatMessages] Mensagens deletadas permanentemente do banco');
 
-      // Limpar estado local DEPOIS que confirmou no banco
+      // Limpar estado local
       setMessages([]);
       setError(null);
 

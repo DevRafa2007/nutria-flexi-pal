@@ -43,6 +43,7 @@ export interface UserProfile {
   activityLevel: ActivityLevel;
   allergies: string[];
   preferences: string[];
+  meals_per_day?: number; // 3, 4, 5, ou 6 refeições diárias
   tdee?: number;
   createdAt?: string;
 }

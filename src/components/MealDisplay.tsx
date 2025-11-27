@@ -24,6 +24,7 @@ import { ChevronDown, ChevronUp, Copy, Check, Trash2, Edit2 } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import useConsumptionTracking from "@/hooks/useConsumptionTracking";
+import { useConsumedFoods } from "@/context/ConsumedFoodsContext";
 
 interface MealDisplayProps {
   meal: Meal;
@@ -45,6 +46,7 @@ const MealDisplay = ({ meal, mealId, onUpdate, onDelete }: MealDisplayProps) => 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { markMealConsumed } = useConsumptionTracking();
+  const { markFoodConsumed, unmarkFoodConsumed } = useConsumedFoods();
 
   const getMealTypeColor = (type: string) => {
     const colors: Record<string, string> = {
@@ -110,16 +112,37 @@ Macros Totais:
     toast.success("Copiado para a área de transferência!");
   };
 
-  const handleToggleFood = (foodIndex: number) => {
+  const handleToggleFood = async (foodIndex: number) => {
+    if (!mealId) return;
+
     const newSet = new Set(consumedFoods);
-    if (newSet.has(foodIndex)) {
+    const isCurrentlyConsumed = newSet.has(foodIndex);
+
+    if (isCurrentlyConsumed) {
       newSet.delete(foodIndex);
+      try {
+        await unmarkFoodConsumed(mealId, foodIndex);
+        toast.info("Alimento desmarcado");
+      } catch (err) {
+        console.error('Erro:', err);
+      }
     } else {
       newSet.add(foodIndex);
+      const food = meal.foods[foodIndex];
+      try {
+        await markFoodConsumed(mealId, foodIndex, {
+          calories: food.macros.calories,
+          protein: food.macros.protein,
+          carbs: food.macros.carbs,
+          fat: food.macros.fat,
+        });
+        toast.success("Alimento marcado!");
+      } catch (err) {
+        console.error('Erro:', err);
+      }
     }
+
     setConsumedFoods(newSet);
-    
-    // Verificar se todos foram consumidos
     setAllConsumed(newSet.size === meal.foods.length);
   };
 
@@ -140,7 +163,7 @@ Macros Totais:
 
       // Registrar consumo no BD
       await markMealConsumed(mealId, 100);
-      
+
       toast.success(`✅ "${meal.name}" marcada como consumida! 🔥`);
     } catch (err) {
       console.error("Erro ao marcar consumo:", err);
@@ -174,7 +197,7 @@ Macros Totais:
       if (mealError) throw mealError;
 
       toast.success(`"${meal.name}" deletada com sucesso! 🗑️`);
-      
+
       // Chamar callback se existir
       if (onDelete) {
         onDelete(mealId);
@@ -227,11 +250,10 @@ Macros Totais:
             {meal.foods.map((food, idx) => (
               <div
                 key={idx}
-                className={`rounded-lg p-3 space-y-2 border transition-all ${
-                  consumedFoods.has(idx)
+                className={`rounded-lg p-3 space-y-2 border transition-all ${consumedFoods.has(idx)
                     ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
                     : "bg-muted/50 border-border/50"
-                }`}
+                  }`}
               >
                 <div className="flex items-start gap-3">
                   <Checkbox
@@ -241,11 +263,10 @@ Macros Totais:
                   />
                   <div className="flex-1">
                     <h4
-                      className={`font-medium text-sm ${
-                        consumedFoods.has(idx)
+                      className={`font-medium text-sm ${consumedFoods.has(idx)
                           ? "line-through text-green-700 dark:text-green-200"
                           : ""
-                      }`}
+                        }`}
                     >
                       {food.name}
                     </h4>

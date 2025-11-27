@@ -4,17 +4,15 @@ import { Button } from "@/components/ui/button";
 import MealDisplay from "@/components/MealDisplay";
 import { Meal } from "@/lib/types";
 import { AlertCircle, Utensils, Sparkles } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { toast } from "sonner";
+import { useMeals } from "@/hooks/useMeals";
 
 interface MealsListProps {
   onRequestTutorial?: () => void;
 }
 
 const MealsList = ({ onRequestTutorial }: MealsListProps) => {
+  const { meals: allMeals, isLoading, error, refreshMeals } = useMeals();
   const [meals, setMeals] = useState<(Meal & { id: string })[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   /**
    * Remove refeições duplicadas, mantendo apenas a mais recente de cada tipo
@@ -41,83 +39,12 @@ const MealsList = ({ onRequestTutorial }: MealsListProps) => {
   };
 
   useEffect(() => {
-    loadMeals();
-  }, []);
-
-  const loadMeals = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setError("Você precisa estar autenticado");
-        return;
-      }
-
-      // Buscar refeições do usuário
-      const { data: mealsData, error: mealsError } = await supabase
-        .from("meals")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (mealsError) throw mealsError;
-
-      // Para cada refeição, buscar seus alimentos
-      const mealsWithFoods: (Meal & { id: string })[] = [];
-
-      for (const meal of mealsData || []) {
-        const { data: foodsData, error: foodsError } = await supabase
-          .from("meal_foods")
-          .select("*")
-          .eq("meal_id", meal.id);
-
-        if (foodsError) throw foodsError;
-
-        const mealWithFoods: Meal & { id: string } = {
-          id: meal.id,
-          name: meal.name,
-          description: meal.description,
-          type: meal.meal_type,
-          foods: (foodsData || []).map((food) => ({
-            name: food.food_name,
-            quantity: food.quantity,
-            unit: food.unit,
-            macros: {
-              protein: food.protein,
-              carbs: food.carbs,
-              fat: food.fat,
-              calories: food.calories,
-            },
-            notes: food.notes,
-          })),
-          totalMacros: {
-            protein: (foodsData || []).reduce((sum, f) => sum + (f.protein || 0), 0),
-            carbs: (foodsData || []).reduce((sum, f) => sum + (f.carbs || 0), 0),
-            fat: (foodsData || []).reduce((sum, f) => sum + (f.fat || 0), 0),
-            calories: (foodsData || []).reduce((sum, f) => sum + (f.calories || 0), 0),
-          },
-        };
-
-        mealsWithFoods.push(mealWithFoods);
-      }
-
-      // ✅ REMOVER DUPLICATAS: Manter apenas a refeição mais recente de cada tipo
-      const deduplicatedMeals = deduplicateMeals(mealsWithFoods);
-      setMeals(deduplicatedMeals);
-    } catch (err) {
-      console.error("Erro ao carregar refeições:", err);
-      const errorMsg = err instanceof Error ? err.message : "Erro ao carregar refeições";
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setIsLoading(false);
+    if (allMeals.length > 0) {
+      setMeals(deduplicateMeals(allMeals));
+    } else {
+      setMeals([]);
     }
-  };
+  }, [allMeals]);
 
   return (
     <div className="space-y-4">
@@ -132,7 +59,7 @@ const MealsList = ({ onRequestTutorial }: MealsListProps) => {
 
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Suas Refeições</h2>
-        <Button onClick={loadMeals} className="gap-2">
+        <Button onClick={refreshMeals} className="gap-2">
           ↻ Atualizar
         </Button>
       </div>
@@ -156,7 +83,7 @@ const MealsList = ({ onRequestTutorial }: MealsListProps) => {
                 Converse com a IA na aba "Monte sua Dieta" para criar sua primeira refeição personalizada!
               </p>
               {onRequestTutorial && (
-                <Button 
+                <Button
                   onClick={onRequestTutorial}
                   className="w-full gap-2 mt-4"
                   variant="default"
@@ -171,13 +98,14 @@ const MealsList = ({ onRequestTutorial }: MealsListProps) => {
       ) : (
         <div className="grid gap-4">
           {meals.map((meal) => (
-            <MealDisplay 
-              key={meal.id} 
-              meal={meal} 
+            <MealDisplay
+              key={meal.id}
+              meal={meal}
               mealId={meal.id}
               onDelete={(deletedId) => {
-                // Remover refeição da lista
+                // Remover refeição da lista localmente e recarregar
                 setMeals(meals.filter(m => m.id !== deletedId));
+                refreshMeals();
               }}
             />
           ))}
