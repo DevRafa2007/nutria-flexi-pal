@@ -341,6 +341,89 @@ SUA PERSONALIDADE:
 - Baseado em ciência, não em mitos
 - Prático: quer receitas fáceis? Tem! Quer fitness? Tem!
 - Sempre oferece alternativas (vegetariano, sem glúten, etc)
+
+═══════════════════════════════════════════════
+🛠️ MODO EDIÇÃO E SUBSTITUIÇÃO
+═══════════════════════════════════════════════
+
+QUANDO O USUÁRIO PEDIR PARA EDITAR/MODIFICAR REFEIÇÃO EXISTENTE:
+
+1. IDENTIFICAR A REFEIÇÃO:
+   - Procurar [ID: xxx] no contexto fornecido
+   - OU identificar pelo nome da refeição mencionada
+
+2. TIPOS DE MODIFICAÇÃO:
+
+   A) SUBSTITUIR ALIMENTO:
+      Pedido: "troca o frango por peixe" ou "substitui arroz por batata doce"
+      → Manter MESMOS macros aproximados (±10%)
+      → Ajustar quantidade do novo alimento para bater macros
+      → Exemplo: 100g frango (165kcal, 31g prot) → 120g salmão (165kcal, 25g prot, ajustado)
+
+   B) AUMENTAR/DIMINUIR MACRO ESPECÍFICO:
+      Pedido: "aumenta proteína em 20g" ou "diminui carboidrato em 30g"
+      → Identificar alimento mais adequado para ajustar
+      → OU adicionar novo alimento rico nesse macro
+      → Recalcular totais
+
+   C) MODIFICAR COMPLETA DA REFEIÇÃO:
+      Pedido: "muda o café da manhã" ou "refaz o almoço"
+      → Criar NOVA combinação de alimentos
+      → MANTER o tipo de refeição (breakfast/lunch/etc)
+      → Respeitar macros alvo desse tipo de refeição
+
+   D) AJUSTAR QUANTIDADE:
+      Pedido: "aumenta a quantidade de arroz" ou "reduz os ovos para 1"
+      → Modificar quantity do alimento específico
+      → Recalcular macros de TODA a refeição
+
+3. FORMATO DE RESPOSTA PARA EDIÇÃO:
+   
+   SEMPRE retorne JSON no MESMO formato de criação, mas com:
+   - "action": "edit"  (NOVO campo indicando edição)
+   - "meal_id": "xxx"  (NOVO campo com ID da refeição editada)
+   - Todos os outros campos iguais (meal_type, name, foods, totals)
+
+   Exemplo de resposta de edição:
+   {
+     "action": "edit",
+     "meal_id": "abc-123-def",
+     "meal_type": "breakfast",
+     "name": "Café da Manhã Modificado",
+     "description": "Troquei frango por peixe",
+     "foods": [
+       {"name": "Salmão", "quantity": 120, "unit": "g", "calories": 208, "protein": 25, "carbs": 0, "fat": 12}
+     ],
+     "totals": {"calories": 208, "protein": 25, "carbs": 0, "fat": 12}
+   }
+
+4. REGRAS CRÍTICAS PARA EDIÇÃO:
+   - SEMPRE preservar o meal_type original (não mudar breakfast para lunch)
+   - SEMPRE recalcular totals corretamente
+   - Se substituir alimento, MANTER macros similares (±20% tolerância)
+   - Explicar brevemente o que foi modificado na description
+
+═══════════════════════════════════════════════
+🎯 AJUSTES INTELIGENTES DE MACROS
+═══════════════════════════════════════════════
+
+Para AUMENTAR proteína:
+ → Adicionar: ovos, frango, peixe, iogurte grego, whey
+ → OU aumentar quantidade de alimento proteico existente
+
+Para AUMENTAR carboidratos:
+ → Adicionar: arroz, batata doce, aveia, banana, pão integral
+ → OU aumentar quantidade de carb existente
+
+Para AUMENTAR gorduras:
+ → Adicionar: azeite, abacate, castanhas, pasta de amendoim
+ → OU aumentar quantidade de gordura existente
+
+Para DIMINUIR calorias:
+ → Reduzir quantidades proporcionalmente
+ → OU remover alimento menos essencial
+ → Priorizar manter proteína alta
+
 `;
 
 /**
@@ -349,17 +432,17 @@ SUA PERSONALIDADE:
  */
 export function parseNutritionPlan(response: string): any[] {
   const meals: any[] = [];
-  
+
   try {
     // Estratégia 1: Procurar por blocos ```json ... ```
     const jsonBlockRegex = /```json\s*([\s\S]*?)\s*```/g;
     let match;
-    
+
     while ((match = jsonBlockRegex.exec(response)) !== null) {
       try {
         const jsonStr = match[1].trim();
         const parsed = JSON.parse(jsonStr);
-        
+
         if (parsed.foods?.length > 0 && parsed.totals && parsed.totals.calories > 50) {
           meals.push(parsed);
           console.log("✅ JSON em ```json``` encontrado:", parsed.name);
@@ -372,12 +455,12 @@ export function parseNutritionPlan(response: string): any[] {
     // Estratégia 2: Se não encontrou blocks, procurar por {...} soltos
     if (meals.length === 0) {
       const jsonObjectRegex = /\{[\s\S]*?"meal_type"[\s\S]*?\}/g;
-      
+
       while ((match = jsonObjectRegex.exec(response)) !== null) {
         try {
           const jsonStr = match[0].trim();
           const parsed = JSON.parse(jsonStr);
-          
+
           if (parsed.foods?.length > 0 && parsed.totals && parsed.totals.calories > 50) {
             meals.push(parsed);
             console.log("✅ JSON solto encontrado:", parsed.name);
@@ -397,7 +480,7 @@ export function parseNutritionPlan(response: string): any[] {
 
         let braceCount = 0;
         let endIdx = startIdx;
-        
+
         for (let i = startIdx; i < response.length; i++) {
           if (response[i] === '{') braceCount++;
           if (response[i] === '}') braceCount--;
@@ -411,7 +494,7 @@ export function parseNutritionPlan(response: string): any[] {
           try {
             const jsonStr = response.substring(startIdx, endIdx + 1).trim();
             const parsed = JSON.parse(jsonStr);
-            
+
             if (parsed.foods?.length > 0 && parsed.totals && parsed.totals.calories > 50) {
               meals.push(parsed);
               console.log("✅ JSON por brace matching encontrado:", parsed.name);
@@ -449,7 +532,7 @@ export function calculateTDEE(params: {
 }): number {
   // Fórmula de Harris-Benedict
   let bmr: number;
-  
+
   if (params.gender === 'male') {
     bmr = 88.362 + (13.397 * params.weight) + (4.799 * params.height) - (5.677 * params.age);
   } else {

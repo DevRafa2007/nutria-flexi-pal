@@ -10,6 +10,9 @@ import useChatMessages from "@/hooks/useChatMessages";
 import useUserProfile from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
 import { formatMessageForDisplay, generateActionSummary, processAssistantMessage } from "@/lib/messageFormatter";
+import { calculateMealDistribution, formatMealTargets } from "@/lib/mealDistribution";
+import { detectIntent, generateIntentPrompt } from "@/lib/intentDetection";
+import { validateMeal, autoCorrectTotals } from "@/lib/mealValidator";
 
 interface ChatInterfaceProps {
   onMealGenerated?: (meal: Meal) => void;
@@ -121,12 +124,12 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
       // Validar refeição
       if (!meal.name || meal.name.trim() === '') {
         toast.error("Nome da refeição inválido");
-        return;
+        return false;
       }
 
       if (!meal.foods || meal.foods.length === 0) {
         toast.error("Refeição sem alimentos");
-        return;
+        return false;
       }
 
       // Validar que tem dados corretos
@@ -134,7 +137,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
       if (totalCals < 50) {
         console.warn("Refeição com calorias muito baixas:", meal);
         toast.error("Refeição com dados inválidos (calorias muito baixas)");
-        return;
+        return false;
       }
 
       const {
@@ -143,7 +146,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       if (!user) {
         toast.error("Você precisa estar autenticado");
-        return;
+        return false;
       }
 
       // Salvar refeição
@@ -182,7 +185,7 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       if (foodsToInsert.length === 0) {
         toast.error("Nenhum alimento válido na refeição");
-        return;
+        return false;
       }
 
       const { data: foodsInserted, error: foodsError } = await supabase
@@ -224,6 +227,86 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
     }
   };
 
+  /**
+   * Atualiza refeição existente no banco de dados
+   */
+  const updateMealInDatabase = async (
+    mealId: string,
+    updatedMeal: Partial<Meal>
+  ): Promise<boolean> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Você precisa estar autenticado");
+        return false;
+      }
+
+      console.log('[updateMealInDatabase] Atualizando refeição:', mealId, updatedMeal);
+
+      // Atualizar informações da refeição
+      if (updatedMeal.name || updatedMeal.description || updatedMeal.type) {
+        const updateData: any = {};
+        if (updatedMeal.name) updateData.name = updatedMeal.name;
+        if (updatedMeal.description) updateData.description = updatedMeal.description;
+        if (updatedMeal.type) updateData.meal_type = updatedMeal.type;
+
+        const { error: mealError } = await supabase
+          .from("meals")
+          .update(updateData)
+          .eq("id", mealId)
+          .eq("user_id", user.id);
+
+        if (mealError) {
+          console.error('[updateMealInDatabase] Erro ao atualizar meal:', mealError);
+          throw mealError;
+        }
+      }
+
+      // Se tem foods, deletar os antigos e inserir os novos
+      if (updatedMeal.foods && updatedMeal.foods.length > 0) {
+        // Deletar alimentos antigos
+        const { error: deleteError } = await supabase
+          .from("meal_foods")
+          .delete()
+          .eq("meal_id", mealId);
+
+        if (deleteError) {
+          console.error('[updateMealInDatabase] Erro ao deletar foods antigos:', deleteError);
+          throw deleteError;
+        }
+
+        // Inserir novos alimentos
+        const foodsToInsert = updatedMeal.foods.map((food) => ({
+          meal_id: mealId,
+          food_name: food.name,
+          quantity: food.quantity || 0,
+          unit: food.unit || 'g',
+          calories: food.macros.calories || 0,
+          protein: food.macros.protein || 0,
+          carbs: food.macros.carbs || 0,
+          fat: food.macros.fat || 0,
+          notes: food.notes || ""
+        }));
+
+        const { error: insertError } = await supabase
+          .from("meal_foods")
+          .insert(foodsToInsert);
+
+        if (insertError) {
+          console.error('[updateMealInDatabase] Erro ao inserir novos foods:', insertError);
+          throw insertError;
+        }
+      }
+
+      toast.success(`✅ Refeição "${updatedMeal.name || 'atualizada'}" modificada com sucesso!`);
+      return true;
+    } catch (err) {
+      console.error("Erro ao atualizar refeição:", err);
+      toast.error("Erro ao atualizar refeição");
+      return false;
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -238,6 +321,10 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       // Carrega refeições anteriores do usuário
       const previousMealsContext = await loadUserMeals();
+
+      // Detecta intenção do usuário
+      const intent = detectIntent(userMessage, previousMealsContext);
+      console.log('[handleSend] Intent detectado:', intent);
 
       // ⚠️ OTIMIZAÇÃO: Limitar histórico para evitar erro 413 (Content Too Large)
       // Mantém apenas as últimas 8 mensagens + a mensagem atual para economizar tokens
@@ -256,19 +343,49 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
       let enhancedPrompt = NUTRITION_SYSTEM_PROMPT;
 
       if (profile) {
-        // ⚠️ OTIMIZAÇÃO: Formato comprimido do perfil para economizar tokens
-        enhancedPrompt += `\n\n📋 PERFIL:
-Peso ${profile.weight}kg | Alt ${profile.height}cm | ${profile.age}a | ${profile.gender} | ${profile.goal === 'lose_weight' ? 'Emagrecer' : profile.goal === 'gain_muscle' ? 'Ganhar' : 'Manter'} | ${profile.activity_level}
-TDEE: ${profile.tdee}kcal
+        // Calcular distribuição de macros por refeição
+        const mealTargets = calculateMealDistribution(
+          profile.target_calories,
+          profile.target_protein,
+          profile.target_carbs,
+          profile.target_fat,
+          profile.meals_per_day || 3
+        );
 
-⭐ METAS (EXATAMENTE):
+        enhancedPrompt += `
+
+📊 PERFIL COMPLETO DO USUÁRIO:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 DADOS: ${profile.weight}kg | ${profile.height}cm | ${profile.age}a | ${profile.gender === 'male' ? 'M' : 'F'}
+🎯 OBJETIVO: ${profile.goal === 'lose_weight' ? 'EMAGRECER' : profile.goal === 'gain_muscle' ? 'GANHAR MASSA' : 'MANTER'}
+📈 Atividade: ${profile.activity_level} | TDEE: ${profile.tdee}kcal
+
+⭐ METAS DIÁRIAS TOTAIS:
 ${profile.target_calories}kcal | ${profile.target_protein}g prot | ${profile.target_carbs}g carb | ${profile.target_fat}g gord
-${profile.dietary_restrictions?.length ? `Restrições: ${profile.dietary_restrictions.join(', ')} ` : ''}${profile.preferred_foods?.length ? `| Gosta: ${profile.preferred_foods.slice(0, 2).join(', ')}` : ''}
 
-QUANDO CRIAR REFEIÇÃO, USE ESTE JSON (sem markdown):
-{"meal_type":"breakfast","name":"Nome","description":"Desc","foods":[{"name":"Alimento","quantity":100,"unit":"g","calories":150,"protein":20,"carbs":10,"fat":5}],"totals":{"calories":TOTAL,"protein":TOTAL,"carbs":TOTAL,"fat":TOTAL}}
+🍽️ DISTRIBUIÇÃO POR REFEIÇÃO (${profile.meals_per_day || 3} refeições/dia):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+☀️ CAFÉ: ${formatMealTargets('breakfast', mealTargets)}
+🍽️ ALMOÇO: ${formatMealTargets('lunch', mealTargets)}
+🌙 JANTAR: ${formatMealTargets('dinner', mealTargets)}
+${(profile.meals_per_day || 3) >= 4 ? `🥜 LANCHE: ${formatMealTargets('snack', mealTargets)}` : ''}
+
+🚫 RESTRIÇÕES: ${profile.dietary_restrictions?.join(', ') || 'Nenhuma'}
+❤️ PREFERÊNCIAS: ${profile.preferred_foods?.slice(0, 5).join(', ') || 'Nenhuma'}
+
+⚠️ IMPORTANTE:
+1. RESPEITE OS VALORES ACIMA POR TIPO DE REFEIÇÃO (±50kcal tolerância)
+2. USE alimentos preferidos: ${profile.preferred_foods?.slice(0, 3).join(', ')}
+3. EVITE restrições: ${profile.dietary_restrictions?.join(', ')}
 
 ${previousMealsContext}`;
+      }
+
+      // Adicionar prompt específico da intenção
+      const intentPrompt = generateIntentPrompt(intent);
+      if (intentPrompt) {
+        enhancedPrompt += intentPrompt;
       }
 
       // Chama Groq API
@@ -299,7 +416,7 @@ ${previousMealsContext}`;
         }
       }
 
-      // Se encontramos refeições no JSON, salvamos todas e não gravamos o JSON no chat
+      // Se encontramos refeições no JSON, salvamos ou atualizamos
       if (parsedMeals && parsedMeals.length > 0) {
         let savedCount = 0;
         const savedMealsSummaries: string[] = [];
@@ -310,11 +427,26 @@ ${previousMealsContext}`;
             continue;
           }
 
+          // Auto-corrigir totals se necessário
+          const correctedMeal = autoCorrectTotals(parsedMeal);
+
+          // Validar refeição
+          const validation = validateMeal(correctedMeal);
+          if (!validation.valid) {
+            console.error('❌ Refeição inválida:', validation.errors);
+            toast.error(`Refeição inválida: ${validation.errors[0]}`);
+            continue;
+          }
+
+          if (validation.warnings.length > 0) {
+            console.warn('⚠️ Avisos de validação:', validation.warnings);
+          }
+
           const meal: Meal = {
-            name: parsedMeal.name || 'Refeição gerada',
-            description: parsedMeal.description || '',
-            type: parsedMeal.meal_type || parsedMeal.type || 'breakfast',
-            foods: parsedMeal.foods.map((f: any) => ({
+            name: correctedMeal.name || 'Refeição gerada',
+            description: correctedMeal.description || '',
+            type: correctedMeal.meal_type || correctedMeal.type || 'breakfast',
+            foods: correctedMeal.foods.map((f: any) => ({
               name: f.name,
               quantity: f.quantity || 0,
               unit: f.unit || 'g',
@@ -327,24 +459,40 @@ ${previousMealsContext}`;
               notes: f.notes || '',
             })),
             totalMacros: {
-              protein: parsedMeal.totals?.protein || parsedMeal.foods.reduce((s: number, f: any) => s + (f.protein || 0), 0),
-              carbs: parsedMeal.totals?.carbs || parsedMeal.foods.reduce((s: number, f: any) => s + (f.carbs || 0), 0),
-              fat: parsedMeal.totals?.fat || parsedMeal.foods.reduce((s: number, f: any) => s + (f.fat || 0), 0),
-              calories: parsedMeal.totals?.calories || parsedMeal.foods.reduce((s: number, f: any) => s + (f.calories || 0), 0),
+              protein: correctedMeal.totals?.protein || 0,
+              carbs: correctedMeal.totals?.carbs || 0,
+              fat: correctedMeal.totals?.fat || 0,
+              calories: correctedMeal.totals?.calories || 0,
             },
           };
 
           try {
-            const ok = await saveMealToDatabase(meal);
+            // Verificar se é edição ou criação
+            const isEdit = correctedMeal.action === 'edit' && correctedMeal.meal_id;
+            let ok = false;
+
+            if (isEdit) {
+              console.log('[handleSend] EDITANDO refeição:', correctedMeal.meal_id);
+              ok = await updateMealInDatabase(correctedMeal.meal_id, meal);
+              if (ok) {
+                savedMealsSummaries.push(`✏️ ${meal.name} (editado)`);
+              }
+            } else {
+              console.log('[handleSend] CRIANDO nova refeição');
+              ok = await saveMealToDatabase(meal);
+              if (ok) {
+                savedMealsSummaries.push(`${meal.name} (${Math.round(meal.totalMacros.calories)} kcal)`);
+              }
+            }
+
             if (ok) {
               savedCount++;
-              savedMealsSummaries.push(`${meal.name} (${Math.round(meal.totalMacros.calories)} kcal)`);
-              console.log(`✅ Refeição "${meal.name}" salva (${savedCount}/${parsedMeals.length})`);
+              console.log(`✅ Refeição "${meal.name}" ${isEdit ? 'atualizada' : 'salva'} (${savedCount}/${parsedMeals.length})`);
             } else {
-              console.warn(`Refeição "${meal.name}" não foi salva.`);
+              console.warn(`Refeição "${meal.name}" não foi ${isEdit ? 'atualizada' : 'salva'}.`);
             }
           } catch (err) {
-            console.error('Erro ao salvar refeição:', err);
+            console.error('Erro ao processar refeição:', err);
           }
         }
 
@@ -460,8 +608,8 @@ Todas estão em "Minhas Refeições".`;
                     )}
                     <div
                       className={`rounded-2xl p-3 max-w-[85%] text-sm transition-all ${message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-tr-sm"
-                          : "bg-muted rounded-tl-sm"
+                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                        : "bg-muted rounded-tl-sm"
                         }`}
                     >
                       {actionSummary && (
@@ -608,8 +756,8 @@ Todas estão em "Minhas Refeições".`;
                       )}
                       <div
                         className={`rounded-2xl p-4 max-w-[80%] text-sm font-medium transition-all ${message.role === "user"
-                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
-                            : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
+                          ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
+                          : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
                           }`}
                       >
                         {actionSummary && (
