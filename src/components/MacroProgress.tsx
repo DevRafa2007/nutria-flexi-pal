@@ -18,6 +18,7 @@ const MacroProgress = () => {
     useEffect(() => {
         const today = new Date();
         const macros = getTotalMacrosForDate(today);
+        console.log('[MacroProgress] Macros atualizados:', macros);
         setConsumedMacros(macros);
     }, [getTotalMacrosForDate]);
 
@@ -74,7 +75,10 @@ const MacroProgress = () => {
                                     {macro.consumed} / {macro.target} {macro.unit}
                                 </span>
                             </div>
-                            <Progress value={percentage} className={macro.color} />
+                            <Progress
+                                value={percentage}
+                                className={`h-2 [&>div]:${macro.color.replace('bg-', 'bg-')}`}
+                            />
                         </div>
                     );
                 })}

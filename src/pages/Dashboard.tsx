@@ -7,6 +7,7 @@ import OnboardingTutorial from "@/components/OnboardingTutorial";
 import MealCreationTutorial from "@/components/MealCreationTutorial";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardHeader from "@/components/DashboardHeader";
+import MacroProgress from "@/components/MacroProgress";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -37,21 +38,21 @@ export function DashboardPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           console.log("[Dashboard] Verificando refeições para usuário:", user.id);
-          
+
           const { data, error } = await supabase
             .from("meals")
             .select("id")
             .eq("user_id", user.id)
             .limit(1);
-          
+
           console.log("[Dashboard] Resultado da query meals:", { data, error, count: data?.length });
-          
+
           if (!error) {
             const mealsExist = data && data.length > 0;
             console.log("[Dashboard] Meals exist:", mealsExist, "hasCompletedMealTutorial:", hasCompletedMealTutorial);
-            
+
             setHasMeals(mealsExist);
-            
+
             // Mostrar tutorial de refeição se não houver refeições E não tiver completado
             if (!mealsExist && !hasCompletedMealTutorial) {
               console.log("[Dashboard] Mostrando tutorial de refeição");
@@ -79,7 +80,7 @@ export function DashboardPage() {
     console.log("[Dashboard] Onboarding completo");
     setShowOnboarding(false);
     setHasCompletedOnboarding(true);
-    
+
     // Recarregar o perfil após completar
     await loadProfile();
   };
@@ -95,7 +96,7 @@ export function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-primary/5">
       <DashboardHeader currentTab={currentTab} onTabChange={setCurrentTab} />
-      
+
       {/* Onboarding Modal */}
       {isProfileEmpty && !hasCompletedOnboarding && !showOnboarding && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
@@ -129,7 +130,7 @@ export function DashboardPage() {
       {showMealCreationTutorial && (
         <MealCreationTutorial onComplete={handleMealCreationTutorialComplete} />
       )}
-      
+
       {/* Chat em tela cheia no celular */}
       {currentTab === "chat" ? (
         <div className="fixed inset-0 top-16 flex flex-col bg-background">
@@ -146,32 +147,40 @@ export function DashboardPage() {
             </p>
           </div>
 
-          <div className="space-y-4">
-            {/* Aba de Refeições */}
-            {currentTab === "meals" && (
-              <div className="space-y-4 animate-fade-in">
-                <MealsList 
-                  onRequestTutorial={() => {
-                    console.log("[Dashboard] Usuário clicou para ver tutorial");
-                    setShowMealCreationTutorial(true);
-                  }}
-                />
-              </div>
-            )}
 
-            {/* Aba de Progresso com Calendário de Streak */}
-            {currentTab === "progress" && (
-              <div className="space-y-4 animate-fade-in">
-                <StreakCalendar />
-              </div>
-            )}
+          <div className="space-y-6">
+            {/* Barras de Progresso de Macros */}
+            <div className="animate-in slide-in-from-top-4 duration-500">
+              <MacroProgress />
+            </div>
 
-            {/* Aba de Perfil */}
-            {currentTab === "profile" && (
-              <div className="space-y-4 animate-fade-in">
-                <ProfileForm />
-              </div>
-            )}
+            <div className="space-y-4">
+              {/* Aba de Refeições */}
+              {currentTab === "meals" && (
+                <div className="space-y-4 animate-fade-in">
+                  <MealsList
+                    onRequestTutorial={() => {
+                      console.log("[Dashboard] Usuário clicou para ver tutorial");
+                      setShowMealCreationTutorial(true);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Aba de Progresso com Calendário de Streak */}
+              {currentTab === "progress" && (
+                <div className="space-y-4 animate-fade-in">
+                  <StreakCalendar />
+                </div>
+              )}
+
+              {/* Aba de Perfil */}
+              {currentTab === "profile" && (
+                <div className="space-y-4 animate-fade-in">
+                  <ProfileForm />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

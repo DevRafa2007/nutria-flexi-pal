@@ -141,20 +141,21 @@ export function useChatMessages() {
 
       if (!user) throw new Error('Usuário não autenticado');
 
-      console.log('[useChatMessages] Iniciando limpeza de mensagens (Hard Delete)');
+      console.log('[useChatMessages] Iniciando limpeza de mensagens (Soft Delete)');
 
-      // Hard delete: remover permanentemente
-      const { error: deleteError } = await supabase
+      // Soft delete: marcar como deletado
+      const { error: updateError } = await supabase
         .from('chat_messages')
-        .delete()
-        .eq('user_id', user.id);
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .is('deleted_at', null); // Apenas as que ainda não foram deletadas
 
-      if (deleteError) {
-        console.error('[useChatMessages] Erro ao deletar mensagens:', deleteError);
-        throw deleteError;
+      if (updateError) {
+        console.error('[useChatMessages] Erro ao deletar mensagens:', updateError);
+        throw updateError;
       }
 
-      console.log('[useChatMessages] Mensagens deletadas permanentemente do banco');
+      console.log('[useChatMessages] Mensagens marcadas como deletadas no banco');
 
       // Limpar estado local
       setMessages([]);

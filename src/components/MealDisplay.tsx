@@ -153,15 +153,27 @@ Macros Totais:
     }
 
     try {
-      // Marcar todos os alimentos como consumidos
+      // Marcar todos os alimentos como consumidos individualmente
       const newSet = new Set<number>();
-      for (let i = 0; i < meal.foods.length; i++) {
-        newSet.add(i);
-      }
+
+      // Criar promises para marcar cada alimento individualmente
+      const foodPromises = meal.foods.map((food, index) => {
+        newSet.add(index);
+        return markFoodConsumed(mealId, index, {
+          calories: food.macros.calories,
+          protein: food.macros.protein,
+          carbs: food.macros.carbs,
+          fat: food.macros.fat,
+        });
+      });
+
+      // Aguardar todos os alimentos serem marcados
+      await Promise.all(foodPromises);
+
       setConsumedFoods(newSet);
       setAllConsumed(true);
 
-      // Registrar consumo no BD
+      // Registrar consumo da refeição inteira (para streak)
       await markMealConsumed(mealId, 100);
 
       toast.success(`✅ "${meal.name}" marcada como consumida! 🔥`);
@@ -251,8 +263,8 @@ Macros Totais:
               <div
                 key={idx}
                 className={`rounded-lg p-3 space-y-2 border transition-all ${consumedFoods.has(idx)
-                    ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
-                    : "bg-muted/50 border-border/50"
+                  ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
+                  : "bg-muted/50 border-border/50"
                   }`}
               >
                 <div className="flex items-start gap-3">
@@ -264,8 +276,8 @@ Macros Totais:
                   <div className="flex-1">
                     <h4
                       className={`font-medium text-sm ${consumedFoods.has(idx)
-                          ? "line-through text-green-700 dark:text-green-200"
-                          : ""
+                        ? "line-through text-green-700 dark:text-green-200"
+                        : ""
                         }`}
                     >
                       {food.name}

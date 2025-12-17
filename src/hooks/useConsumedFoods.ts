@@ -55,6 +55,10 @@ export function useConsumedFoods() {
             if (error) throw error;
 
             setConsumedFoods((data as ConsumedFood[]) || []);
+            console.log('[useConsumedFoods] Carregados:', data?.length, 'registros.');
+            if (data && data.length > 0) {
+                console.log('[useConsumedFoods] Exemplo data:', data[0].consumed_date);
+            }
         } catch (err) {
             console.error('Erro ao carregar alimentos consumidos:', err);
         } finally {
@@ -159,7 +163,10 @@ export function useConsumedFoods() {
      */
     const getTotalMacrosForDate = useCallback(
         (date: Date): TotalMacros => {
-            const foodsForDate = getConsumedFoodsForDate(date);
+            const dateStr = getLocalDateString(date);
+            const foodsForDate = consumedFoods.filter((cf) => cf.consumed_date === dateStr);
+
+            console.log(`[useConsumedFoods] Calculando macros para ${dateStr}. Encontrados: ${foodsForDate.length} registros. Total no estado: ${consumedFoods.length}`);
 
             return foodsForDate.reduce(
                 (totals, food) => ({
@@ -171,7 +178,7 @@ export function useConsumedFoods() {
                 { calories: 0, protein: 0, carbs: 0, fat: 0 }
             );
         },
-        [getConsumedFoodsForDate]
+        [consumedFoods] // Dependência corrigida: removido getConsumedFoodsForDate para evitar ciclo desnecessário, usando consumedFoods direto no filtro acima
     );
 
     /**

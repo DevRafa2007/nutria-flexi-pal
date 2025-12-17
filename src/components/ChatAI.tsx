@@ -374,12 +374,23 @@ ${(profile.meals_per_day || 3) >= 4 ? `🥜 LANCHE: ${formatMealTargets('snack',
 🚫 RESTRIÇÕES: ${profile.dietary_restrictions?.join(', ') || 'Nenhuma'}
 ❤️ PREFERÊNCIAS: ${profile.preferred_foods?.slice(0, 5).join(', ') || 'Nenhuma'}
 
-⚠️ IMPORTANTE:
-1. RESPEITE OS VALORES ACIMA POR TIPO DE REFEIÇÃO (±50kcal tolerância)
-2. USE alimentos preferidos: ${profile.preferred_foods?.slice(0, 3).join(', ')}
-3. EVITE restrições: ${profile.dietary_restrictions?.join(', ')}
+
+⚠️ PROTOCOLO DE CRIAÇÃO OBRIGATÓRIO:
+1. SIGA ESTRITAMENTE a distribuição de macros acima para cada refeição (tolerância máx 5%).
+   - Se o usuário pedir "dieta para hoje", gere TODAS as refeições listadas acima.
+   - NÃO altere a quantidade de refeições calculada a menos que explicitamente pedido.
+
+2. SEJA INTERATIVO E EDUCADO:
+   - Se o pedido for ambíguo (ex: "mude o almoço"), PERGUNTE preferências antes de agir ou ofereça 2 opções curtas.
+   - Se for criar o dia todo, avise: "Vou planejar seu dia com base na meta de ${profile.target_calories}kcal. Prefere algo específico para o almoço?"
+
+3. REGRAS DE MACROS:
+   - Priorize alimentos naturais.
+   - Use as preferências do usuário: ${profile.preferred_foods?.slice(0, 3).join(', ')}
+   - Evite absolutamente: ${profile.dietary_restrictions?.join(', ')}
 
 ${previousMealsContext}`;
+
       }
 
       // Adicionar prompt específico da intenção

@@ -215,7 +215,8 @@ export function useConsumptionTrackingInternal() {
           .eq('user_id', user.id)
           .eq('meal_id', mealId)
           .eq('consumed_date', today)
-          .single();
+          .eq('consumed_date', today)
+          .maybeSingle();
 
         if (existingConsumption) {
           // Já foi consumido hoje, apenas atualizar macros_met se necessário
