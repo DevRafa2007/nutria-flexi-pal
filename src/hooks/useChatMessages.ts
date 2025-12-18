@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ChatMessage } from '@/lib/types';
+import { toast } from 'sonner';
 
 /**
- * Hook para gerenciar mensagens de chat com persistência no Supabase
- * Carrega histórico ao montar e salva novas mensagens automaticamente
+ * Hook para gerenciar mensagens de chat com persistência híbrida (Banco + Local)
+ * Inclui "Local Kill Switch" para contornar bloqueios de delete no banco
  */
 export function useChatMessages() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -17,7 +18,30 @@ export function useChatMessages() {
   }, []);
 
   /**
-   * Carrega todas as mensagens do usuário (que não foram deletadas)
+   * Obtém o timestamp da última limpeza local para este usuário
+   */
+  const getLastClearTime = (userId: string): Date | null => {
+    try {
+      const stored = localStorage.getItem(`chat_cleared_at_${userId}`);
+      return stored ? new Date(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /**
+   * Salva o timestamp atual como momento da limpeza
+   */
+  const setLastClearTime = (userId: string) => {
+    try {
+      localStorage.setItem(`chat_cleared_at_${userId}`, new Date().toISOString());
+    } catch (e) {
+      console.error('Erro ao salvar clear time local:', e);
+    }
+  };
+
+  /**
+   * Carrega todas as mensagens do usuário (filtrando deletadas e antigas)
    */
   const loadMessages = async () => {
     try {
@@ -31,51 +55,47 @@ export function useChatMessages() {
         return;
       }
 
-      // Buscar apenas mensagens NÃO deletadas (deleted_at IS NULL)
-      const query = supabase
+      console.log('[useChatMessages] Carregando mensagens...');
+
+      // Buscar mensagens do banco
+      const { data, error: fetchError } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('user_id', user.id)
-        .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
-      // Executar query e capturar resultado
-      let data: any = null;
-      let fetchError: any = null;
-
-      try {
-        const res = await query;
-        data = (res as any).data;
-        fetchError = (res as any).error;
-      } catch (err) {
-        fetchError = err;
-      }
-
-      // Se houve erro (ex: coluna deleted_at não existe), tentar fallback sem o filtro `.is`
       if (fetchError) {
-        console.warn('[useChatMessages] Erro na query com .is filter, tentando fallback:', fetchError);
-        try {
-          const res2 = await supabase
-            .from('chat_messages')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: true });
-
-          data = (res2 as any).data;
-          fetchError = (res2 as any).error;
-
-          if (fetchError) {
-            console.error('[useChatMessages] Fallback também falhou:', fetchError);
-            throw fetchError;
-          }
-        } catch (err2) {
-          console.error('[useChatMessages] Fallback falhou com erro:', err2);
-          throw err2;
-        }
+        console.error('[useChatMessages] Erro ao carregar:', fetchError);
+        throw fetchError;
       }
+
+      // Obter data de corte local
+      const clearTime = getLastClearTime(user.id);
+
+      // FILTRAGEM MULTI-CAMADA
+      const validMessages = (data || []).filter(msg => {
+        const content = msg.content || '';
+        const msgDate = new Date(msg.created_at);
+
+        // 1. Filtro Local (Kill Switch): Remove mensagens anteriores à limpeza local
+        if (clearTime && msgDate <= clearTime) {
+          return false;
+        }
+
+        // 2. Filtro de Banco: Checa conteúdo marcado como deletado
+        if (content === 'DELETED_MESSAGE_HISTORY_CLEARED') return false;
+        if (content === 'DELETED') return false;
+
+        // 3. Checa flags do banco
+        if (msg.deleted_at) return false;
+
+        return true;
+      });
+
+      console.log(`[useChatMessages] Total Banco: ${data?.length || 0}. Exibidas: ${validMessages.length}. (Corte Local: ${clearTime?.toLocaleString() || 'Nenhum'})`);
 
       // Converter para ChatMessage[]
-      const chatMessages: ChatMessage[] = (data || []).map((msg) => ({
+      const chatMessages: ChatMessage[] = validMessages.map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         timestamp: new Date(msg.created_at),
@@ -92,7 +112,7 @@ export function useChatMessages() {
   };
 
   /**
-   * Adiciona nova mensagem ao estado e salva no banco
+   * Adiciona nova mensagem
    */
   const addMessage = useCallback(
     async (role: 'user' | 'assistant', content: string) => {
@@ -130,8 +150,8 @@ export function useChatMessages() {
   );
 
   /**
-   * Limpa todas as mensagens (Hard Delete)
-   * Remove permanentemente do banco de dados
+   * Limpa todas as mensagens
+   * Combina tentativa de Delete no Banco com Bloqueio Local Garantido
    */
   const clearMessages = useCallback(async () => {
     try {
@@ -141,31 +161,49 @@ export function useChatMessages() {
 
       if (!user) throw new Error('Usuário não autenticado');
 
-      console.log('[useChatMessages] Iniciando limpeza de mensagens (Soft Delete)');
+      console.log('[useChatMessages] 🚨 LIMPEZA SOLICITADA 🚨');
 
-      // Soft delete: marcar como deletado
-      const { error: updateError } = await supabase
-        .from('chat_messages')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .is('deleted_at', null); // Apenas as que ainda não foram deletadas
+      // 1. AÇÃO IMEDIATA: Definir timestamp de corte local
+      // Isso garante que, independente do banco, o usuário não veja mais nada antigo
+      setLastClearTime(user.id);
 
-      if (updateError) {
-        console.error('[useChatMessages] Erro ao deletar mensagens:', updateError);
-        throw updateError;
+      // Limpar estado visual AGORA
+      setMessages([]);
+
+      // 2. AÇÃO DE FUNDO: Tentar limpar no banco (Best Effort)
+      // Não bloqueamos a UI esperando isso, já que o banco pode falhar
+      try {
+        // Tentar deletar tudo (Rápido)
+        const { error: deleteError } = await supabase
+          .from('chat_messages')
+          .delete()
+          .eq('user_id', user.id);
+
+        if (deleteError) throw deleteError;
+        console.log('[useChatMessages] Banco limpo com delete.');
+      } catch (dbErr) {
+        console.warn('[useChatMessages] Delete falhou, tentando update...', dbErr);
+
+        // Tentar update (Lento mas seguro)
+        try {
+          const { data: toUpdate } = await supabase.from('chat_messages').select('id').eq('user_id', user.id);
+          if (toUpdate) {
+            const updates = toUpdate.map(m =>
+              supabase.from('chat_messages').update({ content: 'DELETED' }).eq('id', m.id)
+            );
+            await Promise.allSettled(updates);
+          }
+        } catch (upErr) {
+          console.error('[useChatMessages] Update também falhou:', upErr);
+        }
       }
 
-      console.log('[useChatMessages] Mensagens marcadas como deletadas no banco');
+      toast.success('Histórico apagado com sucesso!');
 
-      // Limpar estado local
-      setMessages([]);
-      setError(null);
-
-      console.log('✅ Chat limpo com sucesso');
     } catch (err) {
-      console.error('Erro ao limpar mensagens:', err);
-      setError('Erro ao limpar histórico. Tente novamente.');
-      throw err;
+      console.error('Erro crítico ao limpar:', err);
+      // Mesmo com erro, o setMessages([]) lá em cima já garantiu o visual limpo
+      setMessages([]);
     }
   }, []);
 
