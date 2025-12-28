@@ -33,7 +33,25 @@ CREATE INDEX IF NOT EXISTS chat_rate_limit_window_start_idx ON public.chat_rate_
 -- 2. ADD MESSAGE SIZE CONSTRAINTS
 -- =====================================================
 
--- Add check constraint to chat_messages (max 2000 chars)
+-- First, truncate existing messages that are too long
+-- This prevents constraint violation error
+UPDATE public.chat_messages 
+SET content = LEFT(content, 2000) || '... [truncado]'
+WHERE char_length(content) > 2000;
+
+-- Log how many were truncated
+DO $$ 
+DECLARE
+  truncated_count integer;
+BEGIN
+  SELECT COUNT(*) INTO truncated_count
+  FROM public.chat_messages
+  WHERE content LIKE '%... [truncado]';
+  
+  RAISE NOTICE 'Truncated % messages to 2000 characters', truncated_count;
+END $$;
+
+-- Now add the constraint (should work since all messages are <= 2000 chars)
 DO $$ 
 BEGIN
   IF NOT EXISTS (
@@ -43,6 +61,10 @@ BEGIN
     ALTER TABLE public.chat_messages 
     ADD CONSTRAINT chat_messages_content_length_check 
     CHECK (char_length(content) <= 2000);
+    
+    RAISE NOTICE 'Added content length constraint (max 2000 chars)';
+  ELSE
+    RAISE NOTICE 'Content length constraint already exists';
   END IF;
 END $$;
 
