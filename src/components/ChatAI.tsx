@@ -553,11 +553,22 @@ Todas estão em "Minhas Refeições".`;
     }
   };
 
+  // Mensagem inicial dinâmica baseada no perfil
+  const getInitialMessage = (): string => {
+    if (!profile) {
+      return "Olá! 👋 Sou a myNutrIA, sua assistente de nutrição com IA.\n\n🎯 Como funciono:\n1. Você me conta sobre seus objetivos (emagrecer, ganhar massa, manter)\n2. Peço informações sobre seu peso, altura, atividades, etc\n3. Calculo suas necessidades calóricas (TDEE)\n4. Crio refeições balanceadas automaticamente\n\n💪 Quando gero uma refeição:\n✨ Aparece automaticamente em \"Minhas Refeições\"\n✅ Você marca quando consumiu\n🔥 Seu streak aumenta (como no Duolingo)\n\n📊 Vamos começar? Me conte seu objetivo principal!";
+    }
+
+    // Se perfil existe, mensagem personalizada
+    const goalText = profile.goal === 'lose_weight' ? 'emagrecimento' : profile.goal === 'gain_muscle' ? 'ganho de massa muscular' : 'manutenção de peso';
+
+    return `Olá! 👋 Sou a myNutrIA, sua assistente de nutrição.\n\n📊 **Perfil carregado com sucesso!**\n👤 ${profile.weight}kg | ${profile.height}cm | ${profile.age} anos\n🎯 Objetivo: ${goalText}\n⚡ Meta diária: ${profile.target_calories}kcal\n🍽️ Macros: ${profile.target_protein}g prot | ${profile.target_carbs}g carb | ${profile.target_fat}g gord\n\n💡 **Como posso ajudar?**\n• "Cria 4 refeições para hoje"\n• "Faz um café da manhã com 400 calorias"\n• "Muda o almoço para incluir mais proteína"\n• "Preciso de opções vegetarianas"\n\nO que você gostaria? 😊`;
+  };
+
   const displayMessages = showInitialMessage && messages.length === 0 ? [
     {
       role: "assistant" as const,
-      content:
-        "Olá! 👋 Sou a myNutrIA, sua assistente de nutrição com IA.\n\n🎯 Como funciono:\n1. Você me conta sobre seus objetivos (emagrecer, ganhar massa, manter)\n2. Peço informações sobre seu peso, altura, atividades, etc\n3. Calculo suas necessidades calóricas (TDEE)\n4. Crio refeições balanceadas automaticamente\n\n💪 Quando gero uma refeição:\n✨ Aparece automaticamente em \"Minhas Refeições\"\n✅ Você marca quando consumiu\n🔥 Seu streak aumenta (como no Duolingo)\n\n📊 Vamos começar? Me conte seu objetivo principal!",
+      content: getInitialMessage(),
       timestamp: new Date(),
     },
   ] : messages;

@@ -1,5 +1,11 @@
 // Groq AI Client for nutrition planning
 // Using Groq's fastest models for real-time responses
+// Groq AI Client for nutrition planning
+// Using Groq's fastest models for real-time responses
+
+// Importando variáveis de ambiente explicitamente para uso no fetch
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 interface GroqMessage {
   role: 'user' | 'assistant' | 'system';
@@ -25,18 +31,7 @@ interface GroqResponse {
   };
 }
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-
-// Modelo mais recente e poderoso do Groq (2025)
-// llama-3.3-70b-versatile: Versão mais nova, 70B params, 8K contexto
-// llama-3.2-90b-vision-preview: Alternativa com visão
-// gemma2-9b-it: Mais leve se tiver problemas
 const MODEL = 'llama-3.3-70b-versatile';
-
-if (!GROQ_API_KEY) {
-  console.warn('⚠️ VITE_GROQ_API_KEY não configurada');
-}
 
 /**
  * Envia mensagem para Groq AI
@@ -48,16 +43,15 @@ export async function sendMessageToGroq(
   messages: GroqMessage[],
   systemPrompt: string = ''
 ): Promise<string> {
-  if (!GROQ_API_KEY) {
-    throw new Error('Groq API Key não configurada');
-  }
-
   try {
-    // ⚠️ OTIMIZAÇÃO: Reduzir tokens para evitar erro 413 (Content Too Large)
-    const response = await fetch(GROQ_API_URL, {
+    // ⚠️ DEBUG: Usando fetch direto para evitar problemas de sessão do supabase-js
+    // Quando verify_jwt=false, o cabeçalho Authorization é ignorado ou aceita anon key
+    // Vamos garantir que estamos enviando apenas a Anon Key e não o token de usuário
+    const response = await fetch(`${supabaseUrl}/functions/v1/chat-completion`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': supabaseAnonKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -65,21 +59,31 @@ export async function sendMessageToGroq(
         messages: systemPrompt
           ? [{ role: 'system', content: systemPrompt }, ...messages]
           : messages,
-        temperature: 0.5, // Reduzido de 0.7 para respostas mais diretas (menos variação)
-        max_tokens: 1024, // Reduzido de 2048 para economizar tokens (refeições não precisam de 2048)
-        top_p: 0.9, // Reduzido de 1 para respostas mais focadas
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 0.9,
       }),
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Groq API Error: ${error.error?.message || 'Unknown error'}`);
+      console.log('--- DEBUG: Supabase Function Call ---');
+      console.log('Status:', response.status);
+      const errorText = await response.text();
+      console.log('Raw Error:', errorText);
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        errorJson = { error: { message: errorText } };
+      }
+      console.error('Supabase Function Error Details:', errorJson);
+      throw new Error(`Erro na comunicação com IA: ${errorJson.error?.message || response.statusText}`);
     }
 
     const data: GroqResponse = await response.json();
     return data.choices[0].message.content;
   } catch (error) {
-    console.error('Erro ao comunicar com Groq:', error);
+    console.error('Erro ao comunicar com Groq via Supabase:', error);
     throw error;
   }
 }
