@@ -179,6 +179,8 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
           if (updated) {
             toast.success(`✅ Refeição "${meal.name}" atualizada com sucesso!`);
             if (onMealGenerated) onMealGenerated(meal);
+            // Disparar evento para notificar outros componentes
+            window.dispatchEvent(new CustomEvent('mealUpdated'));
             return true;
           }
         }
@@ -257,6 +259,10 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
       toast.success(`✅ "${meal.name}" criada em Minhas Refeições!`);
 
       if (onMealGenerated) onMealGenerated(meal);
+
+      // Disparar evento para notificar outros componentes
+      window.dispatchEvent(new CustomEvent('mealUpdated'));
+
       return true;
     } catch (err) {
       console.error("Erro ao salvar refeição:", err);

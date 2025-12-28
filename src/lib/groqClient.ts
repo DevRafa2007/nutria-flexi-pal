@@ -381,6 +381,25 @@ QUANDO O USUÁRIO PEDIR PARA EDITAR/MODIFICAR REFEIÇÃO EXISTENTE:
       → Modificar quantity do alimento específico
       → Recalcular macros de TODA a refeição
 
+   E) REMOVER ALIMENTO:
+      Pedido: "tira as nozes" ou "remove o arroz" ou "sem frango"
+      → APENAS REMOVER o alimento específico
+      → NÃO substituir por outro alimento automaticamente
+      → Recalcular totals SEM o alimento removido
+      → ⚠️ CRÍTICO: Se o usuário pediu para REMOVER, você deve APENAS REMOVER
+      → Exemplo: 
+        * Pedido: "tira as nozes"
+        * ❌ ERRADO: Tirar nozes e adicionar frango
+        * ✅ CORRETO: Apenas tirar nozes e recalcular totals
+
+⚠️⚠️⚠️ REGRA DE OURO: SEJA LITERAL E OBEDIENTE ⚠️⚠️⚠️
+- Se o usuário pediu para TROCAR X por Y, troque.
+- Se o usuário pediu para ADICIONAR X, adicione.
+- Se o usuário pediu para REMOVER X, apenas remova (NÃO adicione nada).
+- Se o usuário pediu para AUMENTAR/DIMINUIR macro, ajuste conforme pedido.
+- NÃO faça "ajustes inteligentes" não solicitados para balancear macros.
+- O usuário sabe o que quer. Faça EXATAMENTE o que foi pedido.
+
 3. FORMATO DE RESPOSTA PARA EDIÇÃO:
    
    SEMPRE retorne JSON no MESMO formato de criação, mas com:
@@ -410,6 +429,9 @@ QUANDO O USUÁRIO PEDIR PARA EDITAR/MODIFICAR REFEIÇÃO EXISTENTE:
 ═══════════════════════════════════════════════
 🎯 AJUSTES INTELIGENTES DE MACROS
 ═══════════════════════════════════════════════
+
+⚠️ IMPORTANTE: Use estas sugestões APENAS quando o usuário explicitamente pedir para ajustar macros.
+Se o usuário pediu para remover/adicionar um alimento específico, NÃO compense automaticamente.
 
 Para AUMENTAR proteína:
  → Adicionar: ovos, frango, peixe, iogurte grego, whey

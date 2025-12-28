@@ -46,6 +46,20 @@ const MealsList = ({ onRequestTutorial }: MealsListProps) => {
     }
   }, [allMeals]);
 
+  // Escutar evento de atualização de refeições do ChatAI
+  useEffect(() => {
+    const handleMealUpdate = () => {
+      console.log('[MealsList] Evento mealUpdated recebido, recarregando...');
+      refreshMeals();
+    };
+
+    window.addEventListener('mealUpdated', handleMealUpdate);
+
+    return () => {
+      window.removeEventListener('mealUpdated', handleMealUpdate);
+    };
+  }, [refreshMeals]);
+
   return (
     <div className="space-y-4">
       {error && (
