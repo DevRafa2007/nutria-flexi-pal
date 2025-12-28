@@ -159,6 +159,32 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
         return false;
       }
 
+      // 🔍 LÓGICA INTELIGENTE: Verificar se já existe refeição desse tipo
+      // Se a IA criou um "Café da Manhã" e já existe um, vamos SUBSTITUIR em vez de duplicar
+      if (meal.type) {
+        const { data: existingMeals } = await supabase
+          .from("meals")
+          .select("id, name")
+          .eq("user_id", user.id)
+          .eq("meal_type", meal.type)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (existingMeals && existingMeals.length > 0) {
+          const existing = existingMeals[0];
+          console.log(`[saveMealToDatabase] 🔄 Substituindo refeição existente: ${existing.name} (${existing.id})`);
+
+          // Chamar update em vez de insert
+          const updated = await updateMealInDatabase(existing.id, meal);
+          if (updated) {
+            toast.success(`✅ Refeição "${meal.name}" atualizada com sucesso!`);
+            if (onMealGenerated) onMealGenerated(meal);
+            return true;
+          }
+        }
+      }
+
+      // Se não existe, prosseguir com criação normal
       // Salvar refeição
       const { data: mealData, error: mealError } = await supabase
         .from("meals")
@@ -227,7 +253,9 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
         }
       }
 
-      toast.success(`✅ "${meal.name}" salva em Minhas Refeições!`);
+      // Se chegou aqui, foi uma INSERÇÃO nova
+      toast.success(`✅ "${meal.name}" criada em Minhas Refeições!`);
+
       if (onMealGenerated) onMealGenerated(meal);
       return true;
     } catch (err) {
