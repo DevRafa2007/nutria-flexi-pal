@@ -3,19 +3,20 @@
 ## Proteções Implementadas
 
 ✅ **Layer 1 - Frontend (ChatAI.tsx)**
-- Limite: 2000 caracteres por mensagem
-- Limite: 50 linhas por mensagem  
+- Limite: 15.000 caracteres por mensagem
+- Limite: 200 linhas por mensagem  
 - Cooldown: 3 segundos entre mensagens
 - Toast warnings para usuário
 
 ✅ **Layer 2 - Edge Function (chat-completion)**
-- Validação servidor: max 2000 chars
+- Validação servidor: max 15.000 chars
 - Validação servidor: max 10 mensagens por requisição
 - Return 400 Bad Request se exceder
 
-✅ **Layer 3 - Database (Migration 0012)**
+✅ **Layer 3 - Database (Migrations 0012 + 0013)**
 - Tabela `chat_rate_limit` para tracking
-- CHECK constraint: max 2000 chars em `chat_messages`
+- CHECK constraint: max 15.000 chars em `chat_messages`
+- System prompt (~13.5KB): NÃO é salvo no banco
 - Function: `cleanup_old_chat_messages()` (auto-delete >30 dias)
 - Function: `check_rate_limit()` (20 msg/min, 200 msg/dia)
 
@@ -27,8 +28,8 @@
 
 ```bash
 # Commitar mudanças
-git add src/components/ChatAI.tsx
-git commit -m "feat: add anti-spam protection to chat (2000 chars, 50 lines, 3s cooldown)"
+git add src/components/ChatAI.tsx supabase/functions/chat-completion/index.ts supabase/migrations/0013_increase_ai_response_limit.sql DEPLOYMENT_ANTI_SPAM.md
+git commit -m "feat: increase message limit to 15000 chars"
 git push
 ```
 
@@ -47,8 +48,9 @@ Isso atualiza a function com as validações server-side.
 **Opção A: Via Supabase Dashboard (Recomendado)**
 1. Abra: https://supabase.com/dashboard/project/zeovlkmweekxcgepyicu
 2. SQL Editor → New query
-3. Cole o conteúdo de `supabase/migrations/0012_add_rate_limiting.sql`
+3. Cole o conteúdo de `supabase/migrations/0013_increase_ai_response_limit.sql`
 4. Execute (Run)
+5. Verifique se constraint foi atualizada (deve mostrar 6000 chars)
 
 **Opção B: Via CLI**
 ```bash
@@ -135,11 +137,11 @@ Retorna número de mensagens deletadas.
 
 ## ✅ Success Criteria
 
-- [ ] Frontend bloqueia mensagens >2000 chars com toast
+- [ ] Frontend bloqueia mensagens >15000 chars com toast
 - [ ] Frontend bloqueia envios rápidos (<3s) com toast  
-- [ ] Edge Function retorna 400 para mensagens longas
-- [ ] Migration aplicada sem erros
-- [ ] Tabela `chat_rate_limit` existe no banco
+- [ ] Edge Function retorna 400 para mensagens >15000 chars
+- [ ] Migration 0013 aplicada sem erros
+- [ ] Constraint no banco permite até 15000 chars
 - [ ] App funciona normalmente para uso legítimo
 
 ---

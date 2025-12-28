@@ -10,8 +10,8 @@ const corsHeaders = {
 // 🔄 Fallback configuration
 const PRIMARY_KEY = Deno.env.get('GROQ_API_KEY');
 const FALLBACK_KEY = Deno.env.get('GROQ_API_KEY2');
-const PRIMARY_MODEL = 'llama-3.3-70b-versatile'; // Modelo principal
-const FALLBACK_MODEL = 'gemma2-9b-it'; // Modelo mais barato para fallback
+const PRIMARY_MODEL = 'llama-3.1-8b-instant'; // Modelo muito rápido e com limites maiores
+const FALLBACK_MODEL = 'mixtral-8x7b-32768'; // Modelo alternativo robusto
 
 Deno.serve(async (req) => {
     console.log(`--- Request Received: ${req.method} ---`);
@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
             })
         }
 
-        // 🛡️ ANTI-SPAM: Validate message size (prevent abuse)
-        const MAX_MESSAGE_LENGTH = 2000;
+        // 🛡️ Validate message size (max 15000 chars)
+        const MAX_MESSAGE_LENGTH = 15000;
         const MAX_MESSAGES_COUNT = 10; // max messages in request
 
         if (!messages || !Array.isArray(messages)) {

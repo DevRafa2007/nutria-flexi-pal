@@ -32,9 +32,10 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Constantes de proteção
-  const MAX_MESSAGE_LENGTH = 2000; // caracteres
-  const MAX_MESSAGE_LINES = 50; // linhas
+  // 🛡️ LIMITES DE PROTEÇÃO
+  // Limite aumentado para 15.000 caracteres por mensagem
+  const MAX_MESSAGE_LENGTH = 15000; // caracteres
+  const MAX_MESSAGE_LINES = 200; // linhas
   const COOLDOWN_MS = 3000; // 3 segundos entre mensagens
 
   // Mostrar mensagem inicial se não houver histórico
