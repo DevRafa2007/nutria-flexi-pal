@@ -38,6 +38,42 @@ Deno.serve(async (req) => {
             })
         }
 
+        // 🛡️ ANTI-SPAM: Validate message size (prevent abuse)
+        const MAX_MESSAGE_LENGTH = 2000;
+        const MAX_MESSAGES_COUNT = 10; // max messages in request
+
+        if (!messages || !Array.isArray(messages)) {
+            console.error('Invalid messages format');
+            return new Response(JSON.stringify({ error: 'Formato de mensagens inválido' }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+
+        // Check number of messages
+        if (messages.length > MAX_MESSAGES_COUNT) {
+            console.error(`Too many messages: ${messages.length}`);
+            return new Response(JSON.stringify({
+                error: `Limite excedido: máximo ${MAX_MESSAGES_COUNT} mensagens por requisição`
+            }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+
+        // Check each message size
+        for (const msg of messages) {
+            if (msg.content && msg.content.length > MAX_MESSAGE_LENGTH) {
+                console.error(`Message too long: ${msg.content.length} chars`);
+                return new Response(JSON.stringify({
+                    error: `Mensagem muito longa: máximo ${MAX_MESSAGE_LENGTH} caracteres`
+                }), {
+                    status: 400,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                })
+            }
+        }
+
         console.log('Calling Groq API...');
         const response = await fetch(GROQ_API_URL, {
             method: 'POST',

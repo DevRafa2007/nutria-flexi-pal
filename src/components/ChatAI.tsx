@@ -26,7 +26,16 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showInitialMessage, setShowInitialMessage] = useState(true);
+
+  // 🛡️ Anti-spam protection
+  const [lastMessageTime, setLastMessageTime] = useState<number>(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Constantes de proteção
+  const MAX_MESSAGE_LENGTH = 2000; // caracteres
+  const MAX_MESSAGE_LINES = 50; // linhas
+  const COOLDOWN_MS = 3000; // 3 segundos entre mensagens
 
   // Mostrar mensagem inicial se não houver histórico
   useEffect(() => {
@@ -310,10 +319,36 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   const handleSend = async () => {
     if (!input.trim()) return;
 
+    // 🛡️ VALIDAÇÃO 1: Tamanho da mensagem
+    if (input.length > MAX_MESSAGE_LENGTH) {
+      toast.error(`⚠️ Mensagem muito longa! Máximo: ${MAX_MESSAGE_LENGTH} caracteres.`);
+      return;
+    }
+
+    // 🛡️ VALIDAÇÃO 2: Número de linhas
+    const lineCount = input.split('\n').length;
+    if (lineCount > MAX_MESSAGE_LINES) {
+      toast.error(`⚠️ Muitas linhas! Máximo: ${MAX_MESSAGE_LINES} linhas.`);
+      return;
+    }
+
+    // 🛡️ VALIDAÇÃO 3: Rate limiting (cooldown)
+    const now = Date.now();
+    const timeSinceLastMessage = now - lastMessageTime;
+
+    if (timeSinceLastMessage < COOLDOWN_MS) {
+      const remainingSeconds = Math.ceil((COOLDOWN_MS - timeSinceLastMessage) / 1000);
+      toast.warning(`🕒 Aguarde ${remainingSeconds}s antes de enviar outra mensagem.`);
+      setCooldownRemaining(remainingSeconds);
+      return;
+    }
+
     const userMessage = input.trim();
     setInput("");
     setError(null);
     setIsLoading(true);
+    setLastMessageTime(now); // Atualiza timestamp
+    setCooldownRemaining(0);
 
     try {
       // Adiciona mensagem do usuário ao banco
