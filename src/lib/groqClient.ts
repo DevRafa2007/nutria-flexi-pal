@@ -39,53 +39,86 @@ const MODEL = 'llama-3.1-8b-instant';
  * @param systemPrompt - Prompt do sistema (instrução)
  * @returns Response da IA
  */
+const MAX_RETRIES = 3;
+const BASE_DELAY = 1000; // 1 second
+
+/**
+ * Envia mensagem para Groq AI com mecanismo de retry automático
+ * @param messages - Array de mensagens do chat
+ * @param systemPrompt - Prompt do sistema (instrução)
+ * @returns Response da IA
+ */
 export async function sendMessageToGroq(
   messages: GroqMessage[],
   systemPrompt: string = ''
 ): Promise<string> {
-  try {
-    // ⚠️ DEBUG: Usando fetch direto para evitar problemas de sessão do supabase-js
-    // Quando verify_jwt=false, o cabeçalho Authorization é ignorado ou aceita anon key
-    // Vamos garantir que estamos enviando apenas a Anon Key e não o token de usuário
-    const response = await fetch(`${supabaseUrl}/functions/v1/chat-completion`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-        'apikey': supabaseAnonKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: systemPrompt
-          ? [{ role: 'system', content: systemPrompt }, ...messages]
-          : messages,
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 0.9,
-      }),
-    });
+  let lastError: any;
 
-    if (!response.ok) {
-      console.log('--- DEBUG: Supabase Function Call ---');
-      console.log('Status:', response.status);
-      const errorText = await response.text();
-      console.log('Raw Error:', errorText);
-      let errorJson;
-      try {
-        errorJson = JSON.parse(errorText);
-      } catch {
-        errorJson = { error: { message: errorText } };
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // ⚠️ DEBUG: Usando fetch direto para evitar problemas de sessão do supabase-js
+      // Quando verify_jwt=false, o cabeçalho Authorization é ignorado ou aceita anon key
+      // Vamos garantir que estamos enviando apenas a Anon Key e não o token de usuário
+      const response = await fetch(`${supabaseUrl}/functions/v1/chat-completion`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: systemPrompt
+            ? [{ role: 'system', content: systemPrompt }, ...messages]
+            : messages,
+          temperature: 0.5,
+          max_tokens: 1024,
+          top_p: 0.9,
+        }),
+      });
+
+      if (!response.ok) {
+        console.log(`--- DEBUG: Supabase Function Call (Attempt ${attempt + 1}/${MAX_RETRIES + 1}) ---`);
+        console.log('Status:', response.status);
+
+        const errorText = await response.text();
+        console.log('Raw Error:', errorText);
+
+        let errorJson;
+        try {
+          errorJson = JSON.parse(errorText);
+        } catch {
+          errorJson = { error: { message: errorText } };
+        }
+
+        // Se for erro de rate limit (429) ou erro de servidor (5xx), tenta novamente
+        if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, attempt); // Exponential backoff: 1s, 2s, 4s
+          console.warn(`⚠️ Rate limit ou erro de servidor. Tentando novamente em ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+
+        console.error('Supabase Function Error Details:', errorJson);
+        throw new Error(`Erro na comunicação com IA: ${errorJson.error?.message || response.statusText}`);
       }
-      console.error('Supabase Function Error Details:', errorJson);
-      throw new Error(`Erro na comunicação com IA: ${errorJson.error?.message || response.statusText}`);
-    }
 
-    const data: GroqResponse = await response.json();
-    return data.choices[0].message.content;
-  } catch (error) {
-    console.error('Erro ao comunicar com Groq via Supabase:', error);
-    throw error;
+      const data: GroqResponse = await response.json();
+      return data.choices[0].message.content;
+
+    } catch (error) {
+      console.error(`Erro ao comunicar com Groq (Attempt ${attempt + 1}):`, error);
+      lastError = error;
+
+      // Se for erro de rede (fetch failed), também tenta novamente
+      if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
+
+  throw lastError || new Error("Falha ao comunicar com IA após várias tentativas");
 }
 
 /**

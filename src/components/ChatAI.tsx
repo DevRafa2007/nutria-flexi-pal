@@ -33,8 +33,8 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 🛡️ LIMITES DE PROTEÇÃO
-  // Limite aumentado para 15.000 caracteres por mensagem
-  const MAX_MESSAGE_LENGTH = 15000; // caracteres
+  // Limite aumentado para 100.000 caracteres por mensagem (match backend)
+  const MAX_MESSAGE_LENGTH = 100000; // caracteres
   const MAX_MESSAGE_LINES = 200; // linhas
   const COOLDOWN_MS = 3000; // 3 segundos entre mensagens
 
@@ -72,7 +72,8 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
         .from("meals")
         .select("id, name, description, meal_type, created_at, meal_foods(*)")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(50); // Optimization: Limit to last 50 meals to prevent context overflow
 
       if (error || !meals?.length) return "";
 

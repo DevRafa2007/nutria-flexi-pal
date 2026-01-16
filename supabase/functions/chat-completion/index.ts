@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
             })
         }
 
-        // 🛡️ Validate message size (max 15000 chars)
-        const MAX_MESSAGE_LENGTH = 15000;
+        // 🛡️ Validate message size (max 100000 chars - expanded for full context)
+        const MAX_MESSAGE_LENGTH = 100000;
         const MAX_MESSAGES_COUNT = 10; // max messages in request
 
         if (!messages || !Array.isArray(messages)) {
