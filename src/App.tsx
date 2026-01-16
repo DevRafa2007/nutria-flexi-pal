@@ -2,15 +2,44 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-import { LoginPage } from "./pages/Login";
-import { RegisterPage } from "./pages/Register";
+import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/Dashboard";
 import { ResetPasswordPage } from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
+
+// AnimatedRoutes component to handle location-based transitions
+const AnimatedRoutes = () => {
+  const location = useLocation();
+
+  // Custom key function:
+  // Returns 'auth' for both /login and /register so they share the same "page" context
+  // This allows the internal Switch animation to happen without a full page exit/enter
+  const getPageKey = (pathname: string) => {
+    if (pathname === '/login' || pathname === '/register') return 'auth';
+    return pathname;
+  };
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={getPageKey(location.pathname)}>
+        <Route path="/" element={<Index />} />
+        {/* Unified Auth Routes */}
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
+
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -18,15 +47,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AnimatedRoutes />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

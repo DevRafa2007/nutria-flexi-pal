@@ -1,10 +1,34 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
+import { motion, useTransform } from "framer-motion";
+import { useSectionAnimation } from "@/components/ImmersiveScroll";
 
 const Hero = () => {
+  const { exitProgress } = useSectionAnimation();
+
+  // Helper for exit animations
+  // Stagger items based on exit progress
+  const useExitStagger = (startCheck: number, endCheck: number) => {
+    return {
+      opacity: useTransform(exitProgress, [startCheck, endCheck], [1, 0]),
+      y: useTransform(exitProgress, [startCheck, endCheck], [0, -50]),
+      scale: useTransform(exitProgress, [startCheck, endCheck], [1, 0.9]),
+      filter: useTransform(exitProgress, [startCheck, endCheck], ["blur(0px)", "blur(10px)"]),
+      willChange: "transform, opacity, filter",
+    };
+  };
+
+  // Staggered styles
+  const titleStyle = useExitStagger(0, 0.3);
+  const textStyle = useExitStagger(0.1, 0.4);
+  const buttonStyle = useExitStagger(0.2, 0.5);
+  const statsStyle = useExitStagger(0.3, 0.6);
+  // Image/Chat Preview uses standard hook now for consistency
+  const imageStyle = useExitStagger(0.2, 0.5);
+
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 py-12 sm:py-20">
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 py-12 sm:py-20 bg-background">
       {/* Animated Background Blobs */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-20 left-10 w-48 h-48 sm:w-72 sm:h-72 bg-primary/20 rounded-full blur-3xl animate-float" />
@@ -15,27 +39,27 @@ const Hero = () => {
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Content */}
           <div className="space-y-6 sm:space-y-8 animate-slide-up">
-            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
+            <motion.div style={titleStyle} className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
               <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               <span className="text-xs sm:text-sm font-medium text-primary">Powered by AI</span>
-            </div>
-            
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
+            </motion.div>
+
+            <motion.h1 style={titleStyle} className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
               <span className="text-gradient">myNutrIA</span>
               <br />
               <span className="text-foreground">Seu Nutricionista</span>
               <br />
               <span className="text-foreground">Inteligente</span>
-            </h1>
+            </motion.h1>
 
-            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
-              Converse com a IA que entende sua rotina e transforma sua alimentação. 
+            <motion.p style={textStyle} className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
+              Converse com a IA que entende sua rotina e transforma sua alimentação.
               Dietas personalizadas baseadas nos alimentos que você já come.
-            </p>
+            </motion.p>
 
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <Button 
-                size="lg" 
+            <motion.div style={buttonStyle} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <Button
+                size="lg"
                 asChild
                 className="bg-primary hover:bg-primary-dark shadow-soft hover:shadow-glow transition-all duration-300 group w-full sm:w-auto"
               >
@@ -44,19 +68,19 @@ const Hero = () => {
                   <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </Button>
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 variant="outline"
                 asChild
-                className="border-primary/30 hover:bg-primary/5 w-full sm:w-auto"
+                className="border-primary/30 hover:bg-primary/10 hover:text-primary w-full sm:w-auto"
               >
                 <Link to="/login">
                   Fazer Login
                 </Link>
               </Button>
-            </div>
+            </motion.div>
 
-            <div className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
+            <motion.div style={statsStyle} className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
               <div>
                 <div className="text-2xl sm:text-3xl font-bold text-primary">10K+</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Planos Criados</div>
@@ -69,11 +93,11 @@ const Hero = () => {
                 <div className="text-2xl sm:text-3xl font-bold text-primary">24/7</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Disponível</div>
               </div>
-            </div>
+            </motion.div>
           </div>
 
           {/* Right Content - Chat Preview */}
-          <div className="relative animate-slide-up mt-8 lg:mt-0" style={{ animationDelay: "0.2s" }}>
+          <motion.div style={imageStyle} className="relative mt-8 lg:mt-0">
             <div className="bg-card rounded-2xl sm:rounded-3xl shadow-card border border-border/50 overflow-hidden backdrop-blur-sm">
               <div className="bg-gradient-primary p-4 sm:p-6 text-primary-foreground">
                 <div className="flex items-center gap-3">
@@ -86,7 +110,7 @@ const Hero = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="p-4 sm:p-6 space-y-3 sm:space-y-4 h-[300px] sm:h-[400px] overflow-y-auto">
                 <div className="flex gap-2 sm:gap-3">
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
@@ -118,7 +142,7 @@ const Hero = () => {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>
