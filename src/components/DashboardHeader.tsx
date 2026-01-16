@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
 import { LogOut, Menu } from "lucide-react";
 import StreakIndicator from "./StreakIndicator";
 import { useNavigate } from "react-router-dom";
@@ -48,24 +49,36 @@ const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {tabs.map((tab) => (
-            <Button
-              key={tab.value}
-              variant={currentTab === tab.value ? "default" : "ghost"}
-              size="sm"
-              onClick={() => onTabChange?.(tab.value)}
-              className="text-sm"
-            >
-              {tab.label}
-            </Button>
-          ))}
+        <nav className="hidden lg:flex items-center">
+          <div className="relative flex p-1 bg-muted/30 rounded-full">
+            {tabs.map((tab) => {
+              const isActive = currentTab === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => onTabChange?.(tab.value)}
+                  className={`relative z-10 px-4 py-2 text-sm font-medium transition-colors duration-200 ${isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="dashboard-tab-pill"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      className="absolute inset-0 bg-background shadow-md border border-black/5 rounded-full"
+                      style={{ zIndex: -1 }}
+                    />
+                  )}
+                  <span className={isActive ? "font-semibold" : ""}>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </nav>
 
         {/* Right side */}
         <div className="flex items-center gap-2 sm:gap-4">
           <StreakIndicator />
-          
+
           <Button
             variant="ghost"
             size="icon"
