@@ -4,6 +4,7 @@ import { Check, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, useTransform, MotionValue } from "framer-motion";
 import { useSectionAnimation } from "@/components/ImmersiveScroll";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface PlanFeature {
   name: string;
@@ -126,38 +127,82 @@ const CTA = () => {
     navigate("/register", { state: { plan: planName } });
   };
 
+  const isMobile = useIsMobile();
+
   // Header Animation (0.0 - 0.1)
-  const headerOpacity = useTransform(enterProgress, [0, 0.1], [0, 1]);
+  // Virtual Scroll Animation (Mobile)
+  const useVirtualScroll = () => {
+    // Mobile: Translate Y upwards to reveal lower content
+    const yInput = isMobile ? [0, 1] : [0, 1];
+    const yOutput = isMobile ? ["0%", "-65%"] : ["0%", "0%"];
+
+    return useTransform(enterProgress, yInput, yOutput);
+  };
+
+  const virtualY = useVirtualScroll();
+
+  const headerOpacity = useTransform(enterProgress, isMobile ? [0, 0.1] : [0, 0.1], isMobile ? [1, 1] : [0, 1]);
   const headerY = useTransform(enterProgress, [0, 0.1], [30, 0]);
+  const headerScale = useTransform(enterProgress, [0.15, 0.2], [1, 0.9]);
 
-  // Card Entrance (0.2 - 0.8)
-  // Compressed to finish before price reveal
+  // Card Entrance (0.1 - 0.9)
   const useCardEntrance = (index: number, total: number) => {
-    const range = 0.6; // 0.8 - 0.2
-    const step = range / total;
-    const start = 0.2 + (index * step);
-    const end = start + step;
+    // Mobile Timeline: Sequential List Entrance
+    // Cards are stacked vertically. They fade in as they approach/enter the virtual viewport.
+    const mStart = 0.1 + (index * 0.2);
 
-    return {
-      opacity: useTransform(enterProgress, [start, end], [0, 1]),
-      y: useTransform(enterProgress, [start, end], [50, 0]),
-      scale: useTransform(enterProgress, [start, end], [0.8, 1]),
-    };
+    // Desktop Params
+    const dRange = 0.6;
+    const dStep = dRange / total;
+    const dStart = 0.2 + (index * dStep);
+    const dEnd = dStart + dStep;
+
+    // Opacity
+    const opacityInput = isMobile ? [mStart, mStart + 0.15] : [dStart, dEnd];
+    const opacityOutput = isMobile ? [0.7, 1] : [0, 1];
+
+    // Y Translation (Local)
+    const yInput = isMobile ? [mStart, mStart + 0.15] : [dStart, dEnd];
+    const yOutput = isMobile ? [30, 0] : [50, 0];
+
+    // Scale
+    const scaleInput = isMobile ? [mStart, mStart + 0.15] : [dStart, dEnd];
+    const scaleOutput = isMobile ? [0.95, 1] : [0.8, 1];
+
+    // Display
+    const displayTransform = (v: number) => "block";
+
+    const opacity = useTransform(enterProgress, opacityInput, opacityOutput);
+    const y = useTransform(enterProgress, yInput, yOutput);
+    const scale = useTransform(enterProgress, scaleInput, scaleOutput);
+    const display = useTransform(enterProgress, displayTransform);
+
+    return { opacity, y, scale, display };
   };
 
   // Price Reveal (0.85 - 0.95)
-  // Happens AFTER all cards are in
-  const priceOpacity = useTransform(enterProgress, [0.85, 0.95], [0, 1]);
+  // Only for desktop or if the card stays visible. 
+  // On mobile, card fades out, so price reveal inside it should happen immediately or with the card.
+  // We'll link price opacity to card opacity logic implicitly or force it to 1 on mobile
+  const priceOpacity = useTransform(enterProgress,
+    isMobile ? [0, 0] : [0.85, 0.95],
+    isMobile ? [1, 1] : [0, 1]
+  );
+
   const priceBlur = useTransform(enterProgress, [0.85, 0.95], ["blur(10px)", "blur(0px)"]);
   const priceScale = useTransform(enterProgress, [0.85, 0.95], [1.5, 1]);
 
   return (
-    <section className="min-h-screen py-12 sm:py-16 lg:py-20 px-4 bg-gradient-to-b from-background to-muted/30 flex flex-col justify-center">
-      <div className="container max-w-6xl mx-auto">
+    <section className="min-h-screen py-0 sm:py-20 px-4 bg-gradient-to-b from-background to-muted/30 flex flex-col justify-center relative overflow-hidden">
+      <motion.div
+        style={{ y: virtualY }}
+        className="container max-w-6xl mx-auto h-full flex flex-col justify-center"
+      >
         <motion.div
           style={{ opacity: headerOpacity, y: headerY }}
-          className="text-center mb-10 sm:mb-12 lg:mb-16 space-y-3 sm:space-y-4"
+          className="text-center mb-8 sm:mb-16 lg:mb-16 space-y-4 shrink-0 relative w-full pt-20 sm:pt-0"
         >
+          {/* ... header content ... */}
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
             <span className="text-gradient">Planos de Assinatura</span>
           </h2>
@@ -166,21 +211,22 @@ const CTA = () => {
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-          {visualPlans.map((plan) => {
-            const animIndex = animationIndices[plan.id];
-            const cardStyle = useCardEntrance(animIndex, 3);
+        <div className={`
+             ${isMobile ? "flex flex-col gap-6 w-full relative pb-40" : "grid md:grid-cols-3 gap-6 lg:gap-8"}
+        `}>
+          {visualPlans.map((plan, idx) => {
+            const cardStyle = useCardEntrance(idx, 3);
 
             return (
               <motion.div
                 key={plan.id}
-                className="h-full"
+                className={`${isMobile ? "w-full" : "h-full"}`}
                 style={cardStyle}
               >
                 <Card
-                  className={`relative h-full transition-all duration-300 hover:shadow-lg flex flex-col ${plan.highlighted
-                      ? "border-primary shadow-glow md:scale-105 z-10"
-                      : "border-border/50"
+                  className={`bg-card/80 backdrop-blur w-full relative h-full transition-all duration-300 hover:shadow-lg flex flex-col ${plan.highlighted
+                    ? "border-primary shadow-glow md:scale-105 z-10"
+                    : "border-border/50"
                     }`}
                 >
                   {plan.highlighted && (
@@ -197,10 +243,10 @@ const CTA = () => {
                       {plan.description}
                     </CardDescription>
 
-                    {/* Price Section with Independent Animation */}
+                    {/* Price Section */}
                     <div className="mt-4 pt-4 border-t border-current border-opacity-20 h-16 flex flex-col justify-center">
                       <motion.div
-                        style={{
+                        style={isMobile ? { opacity: 1, filter: "blur(0px)", scale: 1 } : {
                           opacity: priceOpacity,
                           filter: priceBlur,
                           scale: priceScale,
@@ -217,7 +263,7 @@ const CTA = () => {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="flex-1 flex flex-col pt-6">
+                  <CardContent className="flex-1 flex flex-col pt-6 overflow-hidden">
                     <ul className="space-y-3 mb-8 flex-1">
                       {plan.features.map((feature, fIdx) => (
                         <li key={fIdx} className="flex items-start gap-3">
@@ -228,8 +274,8 @@ const CTA = () => {
                             <div className="w-5 h-5 rounded-full border border-muted-foreground/30 flex-shrink-0 mt-0.5" />
                           )}
                           <span className={`text-sm ${feature.included
-                              ? ""
-                              : "text-muted-foreground line-through opacity-50"
+                            ? ""
+                            : "text-muted-foreground line-through opacity-50"
                             }`}>
                             {feature.name}
                           </span>
@@ -241,8 +287,8 @@ const CTA = () => {
                       onClick={() => handleSelectPlan(plan.name)}
                       size="lg"
                       className={`w-full group ${plan.highlighted
-                          ? "bg-primary hover:bg-primary-dark"
-                          : "bg-muted hover:bg-muted-foreground/20 text-foreground"
+                        ? "bg-primary hover:bg-primary-dark"
+                        : "bg-muted hover:bg-muted-foreground/20 text-foreground"
                         }`}
                     >
                       {plan.cta}
@@ -260,7 +306,7 @@ const CTA = () => {
             ✨ Todos os planos incluem período de teste de 7 dias. Sem necessidade de cartão de crédito.
           </p>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 };

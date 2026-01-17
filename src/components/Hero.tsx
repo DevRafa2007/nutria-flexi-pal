@@ -4,28 +4,14 @@ import { Link } from "react-router-dom";
 import { motion, useTransform } from "framer-motion";
 import { useSectionAnimation } from "@/components/ImmersiveScroll";
 
+import { useIsMobile } from "@/hooks/use-mobile";
+
 const Hero = () => {
-  const { exitProgress } = useSectionAnimation();
+  const { enterProgress } = useSectionAnimation();
+  const isMobile = useIsMobile();
 
-  // Helper for exit animations
-  // Stagger items based on exit progress
-  const useExitStagger = (startCheck: number, endCheck: number) => {
-    return {
-      opacity: useTransform(exitProgress, [startCheck, endCheck], [1, 0]),
-      y: useTransform(exitProgress, [startCheck, endCheck], [0, -50]),
-      scale: useTransform(exitProgress, [startCheck, endCheck], [1, 0.9]),
-      filter: useTransform(exitProgress, [startCheck, endCheck], ["blur(0px)", "blur(10px)"]),
-      willChange: "transform, opacity, filter",
-    };
-  };
-
-  // Staggered styles
-  const titleStyle = useExitStagger(0, 0.3);
-  const textStyle = useExitStagger(0.1, 0.4);
-  const buttonStyle = useExitStagger(0.2, 0.5);
-  const statsStyle = useExitStagger(0.3, 0.6);
-  // Image/Chat Preview uses standard hook now for consistency
-  const imageStyle = useExitStagger(0.2, 0.5);
+  // Virtual scroll for mobile
+  const virtualY = useTransform(enterProgress, isMobile ? [0, 1] : [0, 1], isMobile ? ["0%", "-20%"] : ["0%", "0%"]);
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 py-12 sm:py-20 bg-background">
@@ -35,29 +21,29 @@ const Hero = () => {
         <div className="absolute bottom-20 right-10 w-64 h-64 sm:w-96 sm:h-96 bg-accent/10 rounded-full blur-3xl animate-float" style={{ animationDelay: "2s" }} />
       </div>
 
-      <div className="container max-w-6xl mx-auto">
+      <motion.div style={{ y: virtualY }} className="container max-w-6xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Content */}
           <div className="space-y-6 sm:space-y-8 animate-slide-up">
-            <motion.div style={titleStyle} className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
+            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
               <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               <span className="text-xs sm:text-sm font-medium text-primary">Powered by AI</span>
-            </motion.div>
+            </div>
 
-            <motion.h1 style={titleStyle} className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
               <span className="text-gradient">myNutrIA</span>
               <br />
               <span className="text-foreground">Seu Nutricionista</span>
               <br />
               <span className="text-foreground">Inteligente</span>
-            </motion.h1>
+            </h1>
 
-            <motion.p style={textStyle} className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
+            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
               Converse com a IA que entende sua rotina e transforma sua alimentação.
               Dietas personalizadas baseadas nos alimentos que você já come.
-            </motion.p>
+            </p>
 
-            <motion.div style={buttonStyle} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Button
                 size="lg"
                 asChild
@@ -78,9 +64,9 @@ const Hero = () => {
                   Fazer Login
                 </Link>
               </Button>
-            </motion.div>
+            </div>
 
-            <motion.div style={statsStyle} className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
+            <div className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
               <div>
                 <div className="text-2xl sm:text-3xl font-bold text-primary">10K+</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Planos Criados</div>
@@ -93,11 +79,11 @@ const Hero = () => {
                 <div className="text-2xl sm:text-3xl font-bold text-primary">24/7</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Disponível</div>
               </div>
-            </motion.div>
+            </div>
           </div>
 
           {/* Right Content - Chat Preview */}
-          <motion.div style={imageStyle} className="relative mt-8 lg:mt-0">
+          <div className="relative mt-8 lg:mt-0">
             <div className="bg-card rounded-2xl sm:rounded-3xl shadow-card border border-border/50 overflow-hidden backdrop-blur-sm">
               <div className="bg-gradient-primary p-4 sm:p-6 text-primary-foreground">
                 <div className="flex items-center gap-3">
@@ -142,9 +128,9 @@ const Hero = () => {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 };
