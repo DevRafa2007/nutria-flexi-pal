@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,7 @@ interface ChatInterfaceProps {
 }
 
 const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => {
+  const navigate = useNavigate();
   const { profile } = useUserProfile();
   const { messages, addMessage, clearMessages, isLoading: messagesLoading } = useChatMessages();
   const [input, setInput] = useState("");
@@ -599,9 +601,24 @@ Todas estão em "Minhas Refeições".`;
         await addMessage('assistant', clean);
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Erro ao comunicar com a IA";
-      setError(errorMsg);
-      toast.error(errorMsg);
+      console.error("Erro ao enviar mensagem:", err);
+      const errorMsg = err instanceof Error ? err.message : "Erro desconhecido";
+
+      // Detectar erros de limite (P0001 = Basic, P0002 = Free)
+      if (errorMsg.includes("Limite") || errorMsg.includes("P0001") || errorMsg.includes("P0002")) {
+        toast.error("Limite de mensagens atingido!", {
+          description: "Faça upgrade para continuar conversando.",
+          action: {
+            label: "Fazer Upgrade",
+            onClick: () => navigate("/dashboard?tab=profile"),
+          },
+          duration: 8000
+        });
+        setError("Limite atingido. Faça upgrade para continuar.");
+      } else {
+        toast.error("Erro ao enviar mensagem. Tente novamente.");
+        setError(errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -756,14 +773,14 @@ Todas estão em "Minhas Refeições".`;
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && !isLoading && handleSend()}
-              placeholder="Digite sua mensagem..."
-              disabled={isLoading}
+              onKeyPress={(e) => e.key === "Enter" && !isLoading && !error?.includes("Limite") && handleSend()}
+              placeholder={error?.includes("Limite") ? "Limite atingido. Faça upgrade." : "Digite sua mensagem..."}
+              disabled={isLoading || (error !== null && error.includes("Limite"))}
               className="flex-1 rounded-full border-primary/30"
             />
             <Button
               onClick={handleSend}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || (error !== null && error.includes("Limite"))}
               className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
               size="icon"
             >

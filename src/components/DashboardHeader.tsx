@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
 import { LogOut, Menu } from "lucide-react";
 import StreakIndicator from "./StreakIndicator";
@@ -21,9 +22,15 @@ const DashboardHeader = ({ currentTab, onTabChange }: DashboardHeaderProps) => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
     setIsMenuOpen(false);
     navigate("/");
+    window.scrollTo(0, 0);
   };
 
   const handleTabSelect = (tab: string) => {

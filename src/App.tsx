@@ -9,6 +9,10 @@ import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/Dashboard";
 import { ResetPasswordPage } from "./pages/ResetPassword";
+import { PricingPage } from "./pages/Pricing";
+import { SuccessPage } from "./pages/Success";
+import { CancelPage } from "./pages/Cancel";
+import ReturnPage from "./pages/Return";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +38,13 @@ const AnimatedRoutes = () => {
 
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+
+        {/* Pricing & Payment Routes */}
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/success" element={<SuccessPage />} />
+        <Route path="/return" element={<ReturnPage />} />
+        <Route path="/cancel" element={<CancelPage />} />
+
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

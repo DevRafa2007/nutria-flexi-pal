@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import ChatAI from "@/components/ChatAI";
 import MealsList from "@/components/MealsList";
 import StreakCalendar from "@/components/StreakCalendar";
@@ -10,9 +11,34 @@ import DashboardHeader from "@/components/DashboardHeader";
 import MacroProgress from "@/components/MacroProgress";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
+import SubscriptionStatus from "@/components/SubscriptionStatus";
+import SubscriptionManager from "@/components/SubscriptionManager";
 
 export function DashboardPage() {
-  const [currentTab, setCurrentTab] = useState("meals");
+  // Ler tab da URL se existir
+  // Ler tab e action da URL
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const actionFromUrl = searchParams.get('action');
+
+  const [currentTab, setCurrentTab] = useState(tabFromUrl || "meals");
+
+  // Sincronizar estado com URL e fazer scroll se necessário
+  useEffect(() => {
+    if (tabFromUrl) {
+      setCurrentTab(tabFromUrl);
+    }
+
+    // Se houver ação de upgrade, rolar para a seção de assinatura após renderização
+    if (actionFromUrl === 'upgrade' && tabFromUrl === 'profile') {
+      setTimeout(() => {
+        const element = document.getElementById('subscription-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500); // Delay pequeno para garantir que a aba trocou e o elemento renderizou
+    }
+  }, [tabFromUrl, actionFromUrl]);
   const { profile, loadProfile } = useUserProfile();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
@@ -148,7 +174,11 @@ export function DashboardPage() {
           </div>
 
 
+
           <div className="space-y-6">
+            {/* Status da Assinatura (Topo - Sem Gerenciar) */}
+            <SubscriptionStatus hideManage={true} />
+
             {/* Barras de Progresso de Macros */}
             <div className="animate-in slide-in-from-top-4 duration-500">
               <MacroProgress />
@@ -176,8 +206,16 @@ export function DashboardPage() {
 
               {/* Aba de Perfil */}
               {currentTab === "profile" && (
-                <div className="space-y-4 animate-fade-in">
-                  <ProfileForm />
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-2" id="subscription-section">
+                    {/* Componente de Gestão In-App */}
+                    <SubscriptionManager />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-bold">Dados do Perfil</h2>
+                    <ProfileForm />
+                  </div>
                 </div>
               )}
             </div>

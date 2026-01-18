@@ -84,7 +84,7 @@ const Hero = () => {
 
           {/* Right Content - Chat Preview */}
           <div className="relative mt-8 lg:mt-0">
-            <div className="bg-card rounded-2xl sm:rounded-3xl shadow-card border border-border/50 overflow-hidden backdrop-blur-sm">
+            <div className="bg-card rounded-2xl sm:rounded-3xl shadow-card border border-border/50 overflow-hidden">
               <div className="bg-gradient-primary p-4 sm:p-6 text-primary-foreground">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">

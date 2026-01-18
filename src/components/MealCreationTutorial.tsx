@@ -22,37 +22,37 @@ const steps: Array<{
   description: string;
   icon: React.ReactNode;
 }> = [
-  {
-    id: "welcome",
-    title: "Vamos Criar Sua Primeira Refeição! 🍽️",
-    description: "Agora você vai aprender a usar a IA para criar refeições",
-    icon: "🍽️",
-  },
-  {
-    id: "navigation",
-    title: "Navegando pelo App 🗺️",
-    description: "Veja como se mover entre as diferentes seções",
-    icon: "🗺️",
-  },
-  {
-    id: "chat",
-    title: "Usando o Chat 💬",
-    description: "Como conversar com a IA para criar refeições",
-    icon: "💬",
-  },
-  {
-    id: "messages",
-    title: "Sugestões de Mensagens 💭",
-    description: "Exemplos de como pedir ao myNutrIA",
-    icon: "💭",
-  },
-  {
-    id: "complete",
-    title: "Você Está Pronto! 🚀",
-    description: "Agora é com você!",
-    icon: "🚀",
-  },
-];
+    {
+      id: "welcome",
+      title: "Vamos Criar Sua Primeira Refeição! 🍽️",
+      description: "Agora você vai aprender a usar a IA para criar refeições",
+      icon: "🍽️",
+    },
+    {
+      id: "navigation",
+      title: "Navegando pelo App 🗺️",
+      description: "Veja como se mover entre as diferentes seções",
+      icon: "🗺️",
+    },
+    {
+      id: "chat",
+      title: "Usando o Chat 💬",
+      description: "Como conversar com a IA para criar refeições",
+      icon: "💬",
+    },
+    {
+      id: "messages",
+      title: "Sugestões de Mensagens 💭",
+      description: "Exemplos de como pedir ao myNutrIA",
+      icon: "💭",
+    },
+    {
+      id: "complete",
+      title: "Você Está Pronto! 🚀",
+      description: "Agora é com você!",
+      icon: "🚀",
+    },
+  ];
 
 const MealCreationTutorial = ({ onComplete }: MealCreationTutorialProps) => {
   const [currentStep, setCurrentStep] = useState<TutorialStep>("welcome");
@@ -167,12 +167,12 @@ const MealCreationTutorial = ({ onComplete }: MealCreationTutorialProps) => {
 
           {currentStep === "navigation" && (
             <div className="space-y-4">
-              <div className="bg-purple-50 dark:bg-purple-950 rounded-lg p-4 space-y-3">
-                <p className="font-semibold text-purple-900 dark:text-purple-100">
+              <div className="bg-primary/10 dark:bg-primary/20 rounded-lg p-4 space-y-3">
+                <p className="font-semibold text-primary dark:text-primary">
                   🗺️ Estrutura do App
                 </p>
                 <div className="space-y-3 text-sm">
-                  <div className="bg-white dark:bg-slate-800 rounded p-2 border-l-4 border-purple-500">
+                  <div className="bg-white dark:bg-slate-800 rounded p-2 border-l-4 border-primary">
                     <p className="font-semibold">📊 Dashboard (Home)</p>
                     <p className="text-muted-foreground text-xs mt-1">
                       Você vê seu progresso, streak (sequência de dias), e resumo das refeições

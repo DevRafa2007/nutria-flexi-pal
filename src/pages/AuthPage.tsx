@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { ForgotPasswordModal } from "@/components/ForgotPasswordModal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,6 +13,8 @@ import PageTransition from "@/components/PageTransition";
 export function AuthPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const redirectTo = searchParams.get("redirectTo");
     const [mode, setMode] = useState<"login" | "register">("login");
 
     // Form State
@@ -48,8 +50,9 @@ export function AuthPage() {
                     password,
                 });
                 if (error) throw error;
+                if (error) throw error;
                 toast.success("Login realizado com sucesso!");
-                navigate("/dashboard");
+                navigate(redirectTo || "/dashboard");
             } else {
                 const { error } = await supabase.auth.signUp({
                     email,
@@ -61,7 +64,11 @@ export function AuthPage() {
                     },
                 });
                 if (error) throw error;
+                if (error) throw error;
                 toast.success("Conta criada! Verifique seu email.");
+                // Se o supabase fizer auto-login, podemos redirecionar.
+                // Mas geralmente email confirm é required. Vamos mandar pro dashboard/origem de qualquer forma se sucesso.
+                navigate(redirectTo || "/dashboard");
             }
         } catch (error: any) {
             toast.error(error.message);

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, useTransform, MotionValue } from "framer-motion";
 import { useSectionAnimation } from "@/components/ImmersiveScroll";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/lib/supabaseClient";
 
 interface PlanFeature {
   name: string;
@@ -21,35 +22,6 @@ interface Plan {
   highlighted: boolean;
   cta: string;
 }
-
-// Helper for staggered animations
-const StaggeredItem = ({
-  children,
-  index,
-  total,
-  enterProgress
-}: {
-  children: React.ReactNode;
-  index: number;
-  total: number;
-  enterProgress: MotionValue<number>;
-}) => {
-  // Calculate specific window for this item
-  const step = 1 / total;
-  const start = index * step;
-  const end = start + step;
-
-  // Mapped transforms
-  const opacity = useTransform(enterProgress, [start, end], [0, 1]);
-  const y = useTransform(enterProgress, [start, end], [50, 0]);
-  const scale = useTransform(enterProgress, [start, end], [0.8, 1]);
-
-  return (
-    <motion.div style={{ opacity, y, scale }} className="h-full">
-      {children}
-    </motion.div>
-  );
-};
 
 const CTA = () => {
   const navigate = useNavigate();
@@ -113,18 +85,16 @@ const CTA = () => {
   // Visual Order: Basic (Cheap), Pro (Middle), Premium (Expensive)
   const visualPlans = [basicPlan, proPlan, premiumPlan];
 
-  // Specific animation indices for each plan ID
-  // Premium (Expensive) -> 1st (0)
-  // Basic (Cheap) -> 2nd (1)
-  // Pro (Middle) -> 3rd (2)
-  const animationIndices: Record<string, number> = {
-    premium: 0,
-    basic: 1,
-    pro: 2
-  };
+  const handleSelectPlan = async (planName: string) => {
+    // Verificar sessão
+    const { data: { session } } = await supabase.auth.getSession();
 
-  const handleSelectPlan = (planName: string) => {
-    navigate("/register", { state: { plan: planName } });
+    if (session) {
+      navigate("/pricing");
+    } else {
+      // Redireciona para cadastro, salvando o destino final
+      navigate("/register?redirectTo=/pricing");
+    }
   };
 
   const isMobile = useIsMobile();
@@ -143,12 +113,10 @@ const CTA = () => {
 
   const headerOpacity = useTransform(enterProgress, isMobile ? [0, 0.1] : [0, 0.1], isMobile ? [1, 1] : [0, 1]);
   const headerY = useTransform(enterProgress, [0, 0.1], [30, 0]);
-  const headerScale = useTransform(enterProgress, [0.15, 0.2], [1, 0.9]);
 
   // Card Entrance (0.1 - 0.9)
   const useCardEntrance = (index: number, total: number) => {
     // Mobile Timeline: Sequential List Entrance
-    // Cards are stacked vertically. They fade in as they approach/enter the virtual viewport.
     const mStart = 0.1 + (index * 0.2);
 
     // Desktop Params
@@ -180,17 +148,31 @@ const CTA = () => {
     return { opacity, y, scale, display };
   };
 
-  // Price Reveal (0.85 - 0.95)
-  // Only for desktop or if the card stays visible. 
-  // On mobile, card fades out, so price reveal inside it should happen immediately or with the card.
-  // We'll link price opacity to card opacity logic implicitly or force it to 1 on mobile
-  const priceOpacity = useTransform(enterProgress,
-    isMobile ? [0, 0] : [0.85, 0.95],
-    isMobile ? [1, 1] : [0, 1]
-  );
+  // Price Reveal - individual per card on mobile, global on desktop
+  const usePriceAnimation = (cardIndex: number) => {
+    // Calculate ranges
+    const cardStart = 0.1 + (cardIndex * 0.2);
+    const priceStart = cardStart + 0.08;
+    const priceEnd = priceStart + 0.05;
 
-  const priceBlur = useTransform(enterProgress, [0.85, 0.95], ["blur(10px)", "blur(0px)"]);
-  const priceScale = useTransform(enterProgress, [0.85, 0.95], [1.5, 1]);
+    // Determine input/output based on conditions
+    const isFirstCard = isMobile && cardIndex === 0;
+    const opacityInput = isFirstCard ? [0, 1] : (isMobile ? [priceStart, priceEnd] : [0.85, 0.95]);
+    const opacityOutput = isFirstCard ? [1, 1] : [0, 1];
+
+    const filterInput = isFirstCard ? [0, 1] : (isMobile ? [priceStart, priceEnd] : [0.85, 0.95]);
+    const filterOutput = isFirstCard ? ["blur(0px)", "blur(0px)"] : ["blur(10px)", "blur(0px)"];
+
+    const scaleInput = isFirstCard ? [0, 1] : (isMobile ? [priceStart, priceEnd] : [0.85, 0.95]);
+    const scaleOutput = isFirstCard ? [1, 1] : [1.5, 1];
+
+    // Always call hooks unconditionally
+    return {
+      opacity: useTransform(enterProgress, opacityInput, opacityOutput),
+      filter: useTransform(enterProgress, filterInput, filterOutput),
+      scale: useTransform(enterProgress, scaleInput, scaleOutput)
+    };
+  };
 
   return (
     <section className="min-h-screen py-0 sm:py-20 px-4 bg-gradient-to-b from-background to-muted/30 flex flex-col justify-center relative overflow-hidden">
@@ -216,12 +198,13 @@ const CTA = () => {
         `}>
           {visualPlans.map((plan, idx) => {
             const cardStyle = useCardEntrance(idx, 3);
+            const priceAnimation = usePriceAnimation(idx);
 
             return (
               <motion.div
                 key={plan.id}
                 className={`${isMobile ? "w-full" : "h-full"}`}
-                style={cardStyle}
+                style={{ ...cardStyle, pointerEvents: 'auto' }}
               >
                 <Card
                   className={`bg-card/80 backdrop-blur w-full relative h-full transition-all duration-300 hover:shadow-lg flex flex-col ${plan.highlighted
@@ -246,10 +229,10 @@ const CTA = () => {
                     {/* Price Section */}
                     <div className="mt-4 pt-4 border-t border-current border-opacity-20 h-16 flex flex-col justify-center">
                       <motion.div
-                        style={isMobile ? { opacity: 1, filter: "blur(0px)", scale: 1 } : {
-                          opacity: priceOpacity,
-                          filter: priceBlur,
-                          scale: priceScale,
+                        style={{
+                          opacity: priceAnimation.opacity,
+                          filter: priceAnimation.filter,
+                          scale: priceAnimation.scale,
                           originX: 0
                         }}
                       >
@@ -286,7 +269,7 @@ const CTA = () => {
                     <Button
                       onClick={() => handleSelectPlan(plan.name)}
                       size="lg"
-                      className={`w-full group ${plan.highlighted
+                      className={`w-full group relative z-50 pointer-events-auto ${plan.highlighted
                         ? "bg-primary hover:bg-primary-dark"
                         : "bg-muted hover:bg-muted-foreground/20 text-foreground"
                         }`}

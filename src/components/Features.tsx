@@ -61,7 +61,7 @@ const Features = () => {
     // We need to move up by ~400px-600px.
     // Let's use percentage: 0% -> -30%.
     const yInput = isMobile ? [0, 1] : [0, 1];
-    const yOutput = isMobile ? ["0%", "-55%"] : ["0%", "0%"];
+    const yOutput = isMobile ? ["0%", "-70%"] : ["0%", "0%"];
 
     return useTransform(enterProgress, yInput, yOutput);
   };
@@ -78,13 +78,12 @@ const Features = () => {
     const dStart = 0.1 + (index * 0.05);
 
     // Opacity
-    // Mobile: simple fade in and stay visible
-    const opacityInput = isMobile ? [mStart, mStart + 0.1] : [dStart, dStart + 0.05];
+    // Mobile: simple fade in and    // Opacity
+    const opacityInput = isMobile ? [mStart, mStart + 0.05] : [dStart, dStart + 0.05];
     const opacityOutput = isMobile ? [0.7, 1] : [0, 1];
 
     // Y Position (Local)
-    // Mobile: maybe small local float up?
-    const yInput = isMobile ? [mStart, mStart + 0.1] : [dStart, dStart + 0.05];
+    const yInput = isMobile ? [mStart, mStart + 0.05] : [dStart, dStart + 0.05];
     const yOutput = isMobile ? [20, 0] : [20, 0];
 
     // Display
@@ -102,8 +101,8 @@ const Features = () => {
     // Mobile: Appears last
     const mStart = 0.55;
 
-    const opacity = useTransform(enterProgress, isMobile ? [mStart, mStart + 0.15] : [0, 1], isMobile ? [0, 1] : [1, 1]);
-    const y = useTransform(enterProgress, isMobile ? [mStart, mStart + 0.15] : [0, 1], isMobile ? [30, 0] : [0, 0]);
+    const opacity = useTransform(enterProgress, isMobile ? [mStart, mStart + 0.08] : [0, 1], isMobile ? [0, 1] : [1, 1]);
+    const y = useTransform(enterProgress, isMobile ? [mStart, mStart + 0.08] : [0, 1], isMobile ? [30, 0] : [0, 0]);
 
     return { opacity, y };
   };
@@ -178,7 +177,7 @@ const Features = () => {
             style={cardContainerAnimation}
             className={`
               ${isMobile
-                ? "grid grid-cols-2 gap-4 pb-20" // Add padding bottom for scroll clearance
+                ? "grid grid-cols-1 gap-4 pb-20" // Single column for mobile (vertical stack)
                 : "grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6"
               }
             `}

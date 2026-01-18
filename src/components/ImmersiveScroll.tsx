@@ -36,9 +36,9 @@ const MobileSmartScroll = ({ children }: { children: React.ReactNode }) => {
     // We allocate "Time" (Height) to each section based on the complexity of its internal sequence.
     // The user wants "Step 1 -> Step 2 -> Step 3", so we need plenty of scroll space.
     const getSectionHeight = (index: number) => {
-        if (index === 0) return 200;  // Hero - Enough time to see full chatbot preview
-        if (index === 1) return 900;  // Features - Reduced for faster overall scroll
-        if (index === 2) return 700;  // CTA - Reduced for faster overall scroll
+        if (index === 0) return 150;  // Hero - Quick intro
+        if (index === 1) return 600;  // Features - Faster scroll
+        if (index === 2) return 500;  // CTA - Faster scroll
         return 200;
     };
 
@@ -119,8 +119,8 @@ const MobileScrollyTellingSection = ({
     const entranceRange = [0, 0.15];
 
     // Fade Out at the very end
-    // Exit Animation (Last 15% of scroll - gives more time to view content)
-    const exitRange = [0.85, 1];
+    // Exit Animation (Last 8% of scroll - section is visible until 92%)
+    const exitRange = [0.92, 1];
 
     const opacity = isFirst
         ? (isLast ? useMotionValue(1) : useTransform(activeProgress, exitRange, [1, 0]))
@@ -237,6 +237,8 @@ const DesktopSection = ({
         isVisible: true,
     };
 
+    const pointerEvents = useTransform(opacity, v => v < 0.1 ? "none" : "auto");
+
     return (
         <SectionContext.Provider value={contextValue}>
             <motion.div
@@ -245,6 +247,7 @@ const DesktopSection = ({
                     opacity: isLast ? 1 : opacity,
                     scale: isLast ? 1 : scale,
                     filter: isLast ? undefined : filter,
+                    pointerEvents: isLast ? "auto" : pointerEvents,
                 }}
                 className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-background"
             >

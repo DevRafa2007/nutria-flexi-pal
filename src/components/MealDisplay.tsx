@@ -53,7 +53,7 @@ const MealDisplay = ({ meal, mealId, onUpdate, onDelete }: MealDisplayProps) => 
       breakfast: "bg-yellow-100 text-yellow-800",
       lunch: "bg-blue-100 text-blue-800",
       snack: "bg-orange-100 text-orange-800",
-      dinner: "bg-purple-100 text-purple-800",
+      dinner: "bg-green-100 text-green-800",
     };
     return colors[type] || "bg-gray-100 text-gray-800";
   };

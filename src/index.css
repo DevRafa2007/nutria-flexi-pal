@@ -23,16 +23,16 @@ All colors MUST be HSL.
     --primary-glow: 142 62% 68%;
     --primary-dark: 142 52% 45%;
 
-    /* Secondary - Soft Coral for accents */
-    --secondary: 12 76% 68%;
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary - Light Green for accents */
+    --secondary: 142 45% 85%;
+    --secondary-foreground: 143 8% 20%;
 
     /* Muted - Light backgrounds */
     --muted: 120 25% 97%;
     --muted-foreground: 143 8% 45%;
 
-    /* Accent - Tech purple/blue */
-    --accent: 270 70% 65%;
+    /* Accent - Dark Green */
+    --accent: 142 40% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -46,7 +46,7 @@ All colors MUST be HSL.
 
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(142 52% 58%), hsl(142 62% 68%));
-    --gradient-accent: linear-gradient(135deg, hsl(270 70% 65%), hsl(220 80% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(142 40% 50%), hsl(142 52% 58%));
     --gradient-soft: linear-gradient(180deg, hsl(0 0% 100%), hsl(120 25% 97%));
 
     /* Shadows */
@@ -73,13 +73,13 @@ All colors MUST be HSL.
     --primary-glow: 142 62% 68%;
     --primary-dark: 142 52% 45%;
 
-    --secondary: 12 76% 68%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 142 30% 25%;
+    --secondary-foreground: 0 0% 98%;
 
     --muted: 143 12% 15%;
     --muted-foreground: 143 8% 65%;
 
-    --accent: 270 70% 65%;
+    --accent: 142 40% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62% 50%;
