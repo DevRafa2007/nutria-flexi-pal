@@ -13,6 +13,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { supabase } from "@/lib/supabaseClient";
 import SubscriptionStatus from "@/components/SubscriptionStatus";
 import SubscriptionManager from "@/components/SubscriptionManager";
+import UpgradeModal from "@/components/UpgradeModal";
 
 export function DashboardPage() {
   // Ler tab da URL se existir
@@ -121,6 +122,7 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-primary/5">
+      <UpgradeModal />
       <DashboardHeader currentTab={currentTab} onTabChange={setCurrentTab} />
 
       {/* Onboarding Modal */}

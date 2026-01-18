@@ -8,45 +8,19 @@ import { Sparkles, Zap, Lock, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-interface UsageStats {
-    plan: 'free' | 'basic' | 'pro' | 'premium';
-    usage_count: number;
-    usage_limit: number;
-    subscription_status?: string;
-    current_period_end: string | null;
-}
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface SubscriptionStatusProps {
     hideManage?: boolean;
 }
 
 export default function SubscriptionStatus({ hideManage = false }: SubscriptionStatusProps) {
-    const [stats, setStats] = useState<UsageStats | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { stats, loading } = useSubscription();
     const [portalLoading, setPortalLoading] = useState(false);
     const navigate = useNavigate();
 
-    const fetchUsage = async () => {
-        try {
-            const { data, error } = await supabase.rpc('get_user_usage');
-            if (error) {
-                console.warn('Erro ao carregar status da assinatura:', error);
-                return;
-            }
-            setStats(data as UsageStats);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // fetchUsage removido, usando hook agora
 
-    useEffect(() => {
-        fetchUsage();
-        // Atualiza a cada 30 segundos para manter sync
-        const interval = setInterval(fetchUsage, 30000);
-        return () => clearInterval(interval);
-    }, []);
 
     const handleManageSubscription = async () => {
         setPortalLoading(true);
