@@ -1,7 +1,5 @@
 // Groq AI Client for nutrition planning
 // Using Groq's fastest models for real-time responses
-// Groq AI Client for nutrition planning
-// Using Groq's fastest models for real-time responses
 
 // Importando variáveis de ambiente explicitamente para uso no fetch
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -33,12 +31,6 @@ interface GroqResponse {
 
 const MODEL = 'llama-3.1-8b-instant';
 
-/**
- * Envia mensagem para Groq AI
- * @param messages - Array de mensagens do chat
- * @param systemPrompt - Prompt do sistema (instrução)
- * @returns Response da IA
- */
 const MAX_RETRIES = 3;
 const BASE_DELAY = 1000; // 1 second
 
@@ -71,8 +63,8 @@ export async function sendMessageToGroq(
           messages: systemPrompt
             ? [{ role: 'system', content: systemPrompt }, ...messages]
             : messages,
-          temperature: 0.5,
-          max_tokens: 1024,
+          temperature: 0.3, // Mais baixo = respostas mais previsíveis/estruturadas
+          max_tokens: 2048, // Aumentado para garantir resposta completa
           top_p: 0.9,
         }),
       });
@@ -305,184 +297,127 @@ PROCEDIMENTO PARA CRIAR PLANO:
 
 5. Crie refeições práticas com alimentos acessíveis
 
-MODO CRIAR REFEIÇÃO - INSTRUÇÕES CRÍTICAS:
+═══════════════════════════════════════════════
+🍽️ MODO PLANO COMPLETO DO DIA
+═══════════════════════════════════════════════
+
+QUANDO DETECTAR: "plano do dia", "dieta", "minhas refeições", "cria X refeições"
+
+PROTOCOLO OBRIGATÓRIO:
+
+1. **DISTRIBUIÇÃO CALÓRICA PROPORCIONAL**
+   Use estas proporções baseadas no número de refeições/dia:
+   
+   3 REFEIÇÕES (Café, Almoço, Jantar):
+   - Café da Manhã: 30% das calorias diárias
+   - Almoço: 40% das calorias diárias  
+   - Jantar: 30% das calorias diárias
+   
+   4 REFEIÇÕES (Café, Lanche Manhã, Almoço, Jantar):
+   - Café da Manhã: 25% das calorias diárias
+   - Lanche Manhã: 15% das calorias diárias
+   - Almoço: 35% das calorias diárias
+   - Jantar: 25% das calorias diárias
+   
+   5 REFEIÇÕES (Café, Lanche Manhã, Almoço, Lanche Tarde, Jantar):
+   - Café da Manhã: 25% das calorias diárias
+   - Lanche Manhã: 10% das calorias diárias
+   - Almoço: 35% das calorias diárias
+   - Lanche Tarde: 10% das calorias diárias
+   - Jantar: 20% das calorias diárias
+   
+   6 REFEIÇÕES (Café, Lanche Manhã, Almoço, Lanche Tarde, Jantar, Ceia):
+   - Café da Manhã: 20% das calorias diárias
+   - Lanche Manhã: 10% das calorias diárias
+   - Almoço: 30% das calorias diárias
+   - Lanche Tarde: 10% das calorias diárias
+   - Jantar: 20% das calorias diárias
+   - Ceia: 10% das calorias diárias
+
+2. **VALIDAÇÃO FINAL**
+   ANTES DE RETORNAR, calcule:
+   - Soma total de calorias de todas as refeições
+   - DEVE ser = target_calories do perfil (tolerância ±50 kcal)
+   - Se divergir, AJUSTE as quantidades proporcionalmente
+
+3. **FORMATO DE SAÍDA**
+   Retorne JSON ARRAY com TODAS as refeições:
+   
+   [
+     {
+       "meal_type": "breakfast",
+       "name": "Nome criativo",
+       "description": "Breve explicação da escolha",
+       "foods": [
+         { "name": "Alimento", "quantity": 100, "unit": "g", "calories": 150, "protein": 10, "carbs": 20, "fat": 5 }
+       ],
+       "totals": { "calories": 150, "protein": 10, "carbs": 20, "fat": 5 }
+     }
+   ]
+
+
+4. **EXEMPLO REAL (perfil: 2000 kcal/dia, 4 refeições)**
+   - Café (25% = 500 kcal): Tapioca com ovo + fruta
+   - Lanche (15% = 300 kcal): Iogurte com granola
+   - Almoço (35% = 700 kcal): Arroz integral, frango, salada
+   - Jantar (25% = 500 kcal): Peixe grelhado com legumes
+
+MODO CRIAR REFEIÇÃO - INSTRUÇÕES CRÍTICAS (JSON MODE ONLY):
 QUANDO O USUÁRIO PEDIR: "faz 5 refeições", "cria uma dieta", "gera um plano"
-RESPONDA APENAS COM JSONs (nada de texto, bullets, ou explicações):
+🚨  PARE! NÃO ESCREVA TEXTO, NÃO USE MARKDOWN, NÃO EXPLIQUE NADA. 🚨
+SUA RESPOSTA DEVE SER APENAS UM ARRAY JSON COM AS REFEIÇÕES.
 
-1. ENVIE EXATAMENTE ASSIM (cópia fiel):
-{
-  "meal_type": "breakfast",
-  "name": "Ovos com Aveia",
-  "description": "Café da manhã alto em proteína",
-  "foods": [
-    {
-      "name": "Ovo inteiro",
-      "quantity": 2,
-      "unit": "unidade",
-      "calories": 140,
-      "protein": 12,
-      "carbs": 1,
-      "fat": 10
-    },
-    {
-      "name": "Aveia",
-      "quantity": 30,
-      "unit": "g",
-      "calories": 100,
-      "protein": 2,
-      "carbs": 20,
-      "fat": 2
-    }
-  ],
-  "totals": {
-    "calories": 240,
-    "protein": 14,
-    "carbs": 21,
-    "fat": 12
+FORMATO OBRIGATÓRIO (Copie e preencha):
+[
+  {
+    "meal_type": "breakfast",
+    "name": "Nome da Refeição",
+    "description": "Breve descrição ou explicação da escolha",
+    "foods": [
+      { "name": "Alimento", "quantity": 100, "unit": "g", "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
+    ],
+    "totals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
   }
-}
+]
 
-REGRAS DE OURO:
-1. NUNCA mande markdown, blocos de código, ou explicações
-2. APENAS JSON puro, um após outro
-3. Sem nenhum texto antes ou depois
-4. Números sem aspas (quantity: 2, não "2")
-5. Validar: totals.calories = soma exata dos foods
-6. Unidades válidas: g, kg, ml, l, colher, colher de sopa, colher de chá, xícara, copo, unidade, unidades, filé, peito, fatia, fatias, pote, lata, pacote, porção, porções
-7. Se pedir 5 refeições, mande 5 JSONs diferentes (breakfast, lunch, dinner, snack)
-8. não repita os exemplos, pesquise e consulte os reais macros dos alimentos, siga somente a estrutura do exemplo correto, baseie se nos alimentos que a pessoa gosta para estruturar suas refeições e nos pedidos da pessoa
+REGRAS DE OURO PARA O JSON:
+1. SEMPRE retorne um ARRAY contendo todas as refeições geradas.
+2. NUNCA coloque texto fora do JSON. Se quiser explicar algo, coloque dentro do campo "description" de cada refeição.
+3. Se o usuário pedir 4 refeições, o array deve ter 4 objetos.
+4. Respeite os nomes dos campos: meal_type (breakfast, lunch, snack, dinner), name, foods, totals.
 
-
-EXEMPLOS CORRETOS (não mande nada além disso):
-{
-  "meal_type": "breakfast",
-  "name": "Café da Manhã",
-  "description": "Proteína e carbos",
-  "foods": [
-    {"name": "Ovo", "quantity": 2, "unit": "unidade", "calories": 140, "protein": 12, "carbs": 1, "fat": 10}
-  ],
-  "totals": {"calories": 140, "protein": 12, "carbs": 1, "fat": 10}
-}
-{
-  "meal_type": "lunch",
-  "name": "Almoço",
-  "description": "Frango com arroz",
-  "foods": [
-    {"name": "Frango", "quantity": 100, "unit": "g", "calories": 165, "protein": 31, "carbs": 0, "fat": 3}
-  ],
-  "totals": {"calories": 165, "protein": 31, "carbs": 0, "fat": 3}
-}
+EXEMPLO DE RESPOSTA PERFEITA (Sem texto antes ou depois):
+[
+  {
+    "meal_type": "breakfast",
+    "name": "Ovos mexidos",
+    "description": "Opção rápida com proteína",
+    "foods": [
+      { "name": "Ovo", "quantity": 2, "unit": "unidade", "calories": 140, "protein": 12, "carbs": 1, "fat": 10 }
+    ],
+    "totals": { "calories": 140, "protein": 12, "carbs": 1, "fat": 10 }
+  }
+]
 
 SUA PERSONALIDADE:
-- Amigável, motivador, sem julgamentos
-- Baseado em ciência, não em mitos
-- Prático: quer receitas fáceis? Tem! Quer fitness? Tem!
-- Sempre oferece alternativas (vegetariano, sem glúten, etc)
+- Mesmo sendo JSON, escolha alimentos deliciosos e saudáveis.
+- Seja criativo nos nomes das refeições e descrições.
 
 ═══════════════════════════════════════════════
-🛠️ MODO EDIÇÃO E SUBSTITUIÇÃO
+🛠️ MODO EDIÇÃO
 ═══════════════════════════════════════════════
-
-QUANDO O USUÁRIO PEDIR PARA EDITAR/MODIFICAR REFEIÇÃO EXISTENTE:
-
-1. IDENTIFICAR A REFEIÇÃO:
-   - Procurar [ID: xxx] no contexto fornecido
-   - OU identificar pelo nome da refeição mencionada
-
-2. TIPOS DE MODIFICAÇÃO:
-
-   A) SUBSTITUIR ALIMENTO:
-      Pedido: "troca o frango por peixe" ou "substitui arroz por batata doce"
-      → Manter MESMOS macros aproximados (±10%)
-      → Ajustar quantidade do novo alimento para bater macros
-      → Exemplo: 100g frango (165kcal, 31g prot) → 120g salmão (165kcal, 25g prot, ajustado)
-
-   B) AUMENTAR/DIMINUIR MACRO ESPECÍFICO:
-      Pedido: "aumenta proteína em 20g" ou "diminui carboidrato em 30g"
-      → Identificar alimento mais adequado para ajustar
-      → OU adicionar novo alimento rico nesse macro
-      → Recalcular totais
-
-   C) MODIFICAR COMPLETA DA REFEIÇÃO:
-      Pedido: "muda o café da manhã" ou "refaz o almoço"
-      → Criar NOVA combinação de alimentos
-      → MANTER o tipo de refeição (breakfast/lunch/etc)
-      → Respeitar macros alvo desse tipo de refeição
-
-   D) AJUSTAR QUANTIDADE:
-      Pedido: "aumenta a quantidade de arroz" ou "reduz os ovos para 1"
-      → Modificar quantity do alimento específico
-      → Recalcular macros de TODA a refeição
-
-   E) REMOVER ALIMENTO:
-      Pedido: "tira as nozes" ou "remove o arroz" ou "sem frango"
-      → APENAS REMOVER o alimento específico
-      → NÃO substituir por outro alimento automaticamente
-      → Recalcular totals SEM o alimento removido
-      → ⚠️ CRÍTICO: Se o usuário pediu para REMOVER, você deve APENAS REMOVER
-      → Exemplo: 
-        * Pedido: "tira as nozes"
-        * ❌ ERRADO: Tirar nozes e adicionar frango
-        * ✅ CORRETO: Apenas tirar nozes e recalcular totals
-
-⚠️⚠️⚠️ REGRA DE OURO: SEJA LITERAL E OBEDIENTE ⚠️⚠️⚠️
-- Se o usuário pediu para TROCAR X por Y, troque.
-- Se o usuário pediu para ADICIONAR X, adicione.
-- Se o usuário pediu para REMOVER X, apenas remova (NÃO adicione nada).
-- Se o usuário pediu para AUMENTAR/DIMINUIR macro, ajuste conforme pedido.
-- NÃO faça "ajustes inteligentes" não solicitados para balancear macros.
-- O usuário sabe o que quer. Faça EXATAMENTE o que foi pedido.
-
-3. FORMATO DE RESPOSTA PARA EDIÇÃO:
-   
-   SEMPRE retorne JSON no MESMO formato de criação, mas com:
-   - "action": "edit"  (NOVO campo indicando edição)
-   - "meal_id": "xxx"  (NOVO campo com ID da refeição editada)
-   - Todos os outros campos iguais (meal_type, name, foods, totals)
-
-   Exemplo de resposta de edição:
-   {
-     "action": "edit",
-     "meal_id": "abc-123-def",
-     "meal_type": "breakfast",
-     "name": "Café da Manhã Modificado",
-     "description": "Troquei frango por peixe",
-     "foods": [
-       {"name": "Salmão", "quantity": 120, "unit": "g", "calories": 208, "protein": 25, "carbs": 0, "fat": 12}
-     ],
-     "totals": {"calories": 208, "protein": 25, "carbs": 0, "fat": 12}
-   }
-
-4. REGRAS CRÍTICAS PARA EDIÇÃO:
-   - SEMPRE preservar o meal_type original (não mudar breakfast para lunch)
-   - SEMPRE recalcular totals corretamente
-   - Se substituir alimento, MANTER macros similares (±20% tolerância)
-   - Explicar brevemente o que foi modificado na description
-
-═══════════════════════════════════════════════
-🎯 AJUSTES INTELIGENTES DE MACROS
-═══════════════════════════════════════════════
-
-⚠️ IMPORTANTE: Use estas sugestões APENAS quando o usuário explicitamente pedir para ajustar macros.
-Se o usuário pediu para remover/adicionar um alimento específico, NÃO compense automaticamente.
-
-Para AUMENTAR proteína:
- → Adicionar: ovos, frango, peixe, iogurte grego, whey
- → OU aumentar quantidade de alimento proteico existente
-
-Para AUMENTAR carboidratos:
- → Adicionar: arroz, batata doce, aveia, banana, pão integral
- → OU aumentar quantidade de carb existente
-
-Para AUMENTAR gorduras:
- → Adicionar: azeite, abacate, castanhas, pasta de amendoim
- → OU aumentar quantidade de gordura existente
-
-Para DIMINUIR calorias:
- → Reduzir quantidades proporcionalmente
- → OU remover alimento menos essencial
- → Priorizar manter proteína alta
-
+Se o usuário pedir alteração ("troca frango por peixe"), retorne o ARRAY JSON atualizado com action: "edit" e meal_id.
+[
+  {
+    "action": "edit",
+    "meal_id": "id-da-refeicao",
+    "meal_type": "lunch",
+    "name": "Peixe com Batata",
+    "description": "Substituído frango por peixe conforme pedido",
+    "foods": [...],
+    "totals": {...}
+  }
+]
 `;
 
 /**
@@ -502,12 +437,58 @@ export function parseNutritionPlan(response: string): any[] {
         const jsonStr = match[1].trim();
         const parsed = JSON.parse(jsonStr);
 
-        if (parsed.foods?.length > 0 && parsed.totals && parsed.totals.calories > 50) {
+        // Se for um ARRAY de refeições, adiciona todas
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item.foods?.length > 0 && item.totals && item.totals.calories > 50) {
+              meals.push(item);
+              console.log("✅ JSON array item encontrado:", item.name);
+            }
+          }
+        }
+        // Se for um objeto único
+        else if (parsed.foods?.length > 0 && parsed.totals && parsed.totals.calories > 50) {
           meals.push(parsed);
-          console.log("✅ JSON em ```json``` encontrado:", parsed.name);
+          console.log("✅ JSON em \`\`\`json\`\`\` encontrado:", parsed.name);
         }
       } catch (e) {
-        console.warn("⚠️ JSON em ```json``` inválido");
+        console.warn("⚠️ JSON em \`\`\`json\`\`\` inválido");
+      }
+    }
+
+    // Estratégia 1.5: Procurar por array JSON diretamente na resposta (sem blocos de código)
+    if (meals.length === 0) {
+      // Usar bracket matching para encontrar array completo
+      const startIdx = response.indexOf('[');
+      if (startIdx !== -1) {
+        let bracketCount = 0;
+        let endIdx = startIdx;
+
+        for (let i = startIdx; i < response.length; i++) {
+          if (response[i] === '[') bracketCount++;
+          if (response[i] === ']') bracketCount--;
+          if (bracketCount === 0) {
+            endIdx = i;
+            break;
+          }
+        }
+
+        if (endIdx > startIdx) {
+          try {
+            const jsonStr = response.substring(startIdx, endIdx + 1);
+            const parsed = JSON.parse(jsonStr);
+            if (Array.isArray(parsed)) {
+              for (const item of parsed) {
+                if (item.foods?.length > 0 && item.totals && item.totals.calories > 50) {
+                  meals.push(item);
+                  console.log("✅ Array JSON direto encontrado:", item.name);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("⚠️ Array JSON direto inválido:", e);
+          }
+        }
       }
     }
 
@@ -581,6 +562,7 @@ export function parseNutritionPlan(response: string): any[] {
 
 /**
  * Calcula TDEE baseado em informações do usuário
+ * Fórmula de Mifflin-St Jeor (mais precisa e moderna)
  */
 export function calculateTDEE(params: {
   weight: number; // kg
@@ -589,13 +571,13 @@ export function calculateTDEE(params: {
   gender: 'male' | 'female';
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 }): number {
-  // Fórmula de Harris-Benedict
+  // Fórmula de Mifflin-St Jeor
   let bmr: number;
 
   if (params.gender === 'male') {
-    bmr = 88.362 + (13.397 * params.weight) + (4.799 * params.height) - (5.677 * params.age);
+    bmr = (10 * params.weight) + (6.25 * params.height) - (5 * params.age) + 5;
   } else {
-    bmr = 447.593 + (9.247 * params.weight) + (3.098 * params.height) - (4.330 * params.age);
+    bmr = (10 * params.weight) + (6.25 * params.height) - (5 * params.age) - 161;
   }
 
   // Multiplicadores de atividade

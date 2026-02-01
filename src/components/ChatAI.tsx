@@ -14,6 +14,8 @@ import { formatMessageForDisplay, generateActionSummary, processAssistantMessage
 import { calculateMealDistribution, formatMealTargets } from "@/lib/mealDistribution";
 import { detectIntent, generateIntentPrompt } from "@/lib/intentDetection";
 import { validateMeal, autoCorrectTotals } from "@/lib/mealValidator";
+import { MealPlanPreview } from "@/components/MealPlanPreview";
+import { validateMealPlan, isFullPlanRequest, scaleMealsToTarget } from "@/lib/planValidator";
 
 interface ChatInterfaceProps {
   onMealGenerated?: (meal: Meal) => void;
@@ -33,6 +35,9 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
   const [lastMessageTime, setLastMessageTime] = useState<number>(0);
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 🥗 Pending Meal Plan (Rascunho)
+  const [pendingPlan, setPendingPlan] = useState<Meal[] | null>(null);
 
   // 🛡️ LIMITES DE PROTEÇÃO
   // Limite aumentado para 100.000 caracteres por mensagem (match backend)
@@ -121,6 +126,16 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
 
       mealsContext += `\n✏️ Para EDITAR uma refeição: "edita o [ID: xxx]" ou "muda a refeição [nome]"\n`;
       mealsContext += `📋 Para CRIAR novas: "cria X refeições" ou "faz um plano do dia"\n`;
+
+      if (pendingPlan && pendingPlan.length > 0) {
+        mealsContext += `\n🚧 RASCUNHO ATUAL (Não salvo ainda):\n`;
+        pendingPlan.forEach((meal) => {
+          const m = meal.totalMacros;
+          mealsContext += `  [ID RASCUNHO: ${meal.id}] ${meal.type.toUpperCase()}: ${meal.name} (${Math.round(m.calories)}kcal - P:${Math.round(m.protein)} C:${Math.round(m.carbs)} G:${Math.round(m.fat)})\n`;
+          mealsContext += `    Foods: ${meal.foods.map(f => `${f.quantity}${f.unit} ${f.name}`).join(', ')}\n`;
+        });
+        mealsContext += `\n⚠️ O usuário está prester a aceitar ou rejeitar este rascunho. Se ele pedir mudanças, EDITE este rascunho (retornando JSONs com action="edit" e o ID do rascunho).\n`;
+      }
 
       return mealsContext;
     } catch (err) {
@@ -354,6 +369,59 @@ const ChatAI = ({ onMealGenerated, fullscreen = false }: ChatInterfaceProps) => 
     }
   };
 
+  const handleAcceptPlan = async () => {
+    if (!pendingPlan || pendingPlan.length === 0) return;
+
+    setIsLoading(true);
+    let successCount = 0;
+
+    try {
+      for (const meal of pendingPlan) {
+        // Remover ID temporário antes de salvar para criar um novo (ou manter se for edição de existente real)
+        const mealToSave = { ...meal };
+
+        let saved = false;
+
+        // Se o ID for temporário, é uma criação nova, removemos o ID para o DB gerar
+        const isTempId = meal.id?.startsWith('temp-');
+
+        if (isTempId) {
+          delete mealToSave.id;
+          saved = await saveMealToDatabase(mealToSave);
+        } else {
+          // Se não é temp, é uma edição de uma meal existente no DB
+          if (meal.id) {
+            saved = await updateMealInDatabase(meal.id, mealToSave);
+          } else {
+            saved = await saveMealToDatabase(mealToSave);
+          }
+        }
+
+        if (saved) successCount++;
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} refeições salvas com sucesso!`);
+        await addMessage('assistant', `✅ Prontinho! Salvei ${successCount} refeições no seu perfil. Elas já aparecem na aba "Minhas Refeições".`);
+        setPendingPlan(null); // Limpa o rascunho
+      } else {
+        toast.error("Não foi possível salvar as refeições.");
+      }
+    } catch (err) {
+      console.error("Erro ao aceitar plano:", err);
+      toast.error("Erro ao salvar plano.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRejectPlan = async () => {
+    if (window.confirm('Tem certeza que deseja descartar este plano?')) {
+      setPendingPlan(null);
+      await addMessage('assistant', '🗑️ Plano descartado. O que gostaria de fazer agora?');
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -466,8 +534,11 @@ ${previousMealsContext}`;
 
       }
 
-      // Adicionar prompt específico da intenção
-      const intentPrompt = generateIntentPrompt(intent);
+      // Adicionar prompt específico da intenção (com calorias do perfil)
+      const intentPrompt = generateIntentPrompt(intent, {
+        target: profile?.target_calories || 2000,
+        mealsPerDay: profile?.meals_per_day || 4
+      });
       if (intentPrompt) {
         enhancedPrompt += intentPrompt;
       }
@@ -500,17 +571,12 @@ ${previousMealsContext}`;
         }
       }
 
-      // Se encontramos refeições no JSON, salvamos ou atualizamos
+      // Se encontramos refeições no JSON, tratamos como RASCUNHO (Pending Plan)
       if (parsedMeals && parsedMeals.length > 0) {
-        let savedCount = 0;
-        const savedMealsSummaries: string[] = [];
+        const newMeals: Meal[] = [];
+        const warnings: string[] = [];
 
         for (const parsedMeal of parsedMeals) {
-          if (!parsedMeal || !parsedMeal.foods || parsedMeal.foods.length === 0) {
-            console.warn('Refeição ignorada (sem alimentos)', parsedMeal);
-            continue;
-          }
-
           // Auto-corrigir totals se necessário
           const correctedMeal = autoCorrectTotals(parsedMeal);
 
@@ -518,15 +584,13 @@ ${previousMealsContext}`;
           const validation = validateMeal(correctedMeal);
           if (!validation.valid) {
             console.error('❌ Refeição inválida:', validation.errors);
-            toast.error(`Refeição inválida: ${validation.errors[0]}`);
+            warnings.push(`Ignorei uma refeição inválida: ${validation.errors[0]}`);
             continue;
           }
 
-          if (validation.warnings.length > 0) {
-            console.warn('⚠️ Avisos de validação:', validation.warnings);
-          }
-
           const meal: Meal = {
+            // Se já tem ID (edição de uma existente no banco), mantém. Se não, gera temp ID se não tiver
+            id: correctedMeal.meal_id || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: correctedMeal.name || 'Refeição gerada',
             description: correctedMeal.description || '',
             type: correctedMeal.meal_type || correctedMeal.type || 'breakfast',
@@ -549,54 +613,59 @@ ${previousMealsContext}`;
               calories: correctedMeal.totals?.calories || 0,
             },
           };
+          newMeals.push(meal);
+        }
 
-          try {
-            // Verificar se é edição ou criação
-            const isEdit = correctedMeal.action === 'edit' && correctedMeal.meal_id;
-            let ok = false;
+        if (newMeals.length > 0) {
+          // Verificar se é um plano completo (múltiplas refeições cobrindo o dia)
+          const isCompletePlan = newMeals.length >= 3 || isFullPlanRequest(userMessage);
 
-            if (isEdit) {
-              console.log('[handleSend] EDITANDO refeição:', correctedMeal.meal_id);
-              ok = await updateMealInDatabase(correctedMeal.meal_id, meal);
-              if (ok) {
-                savedMealsSummaries.push(`✏️ ${meal.name} (editado)`);
-              }
-            } else {
-              console.log('[handleSend] CRIANDO nova refeição');
-              ok = await saveMealToDatabase(meal);
-              if (ok) {
-                savedMealsSummaries.push(`${meal.name} (${Math.round(meal.totalMacros.calories)} kcal)`);
-              }
+          console.log('🍽️ [handleSend] newMeals:', newMeals.length, 'refeições', newMeals.map(m => m.name));
+          console.log('🍽️ [handleSend] isCompletePlan:', isCompletePlan);
+
+          // 🔄 ESCALAR CALORIAS para atingir o target do usuário
+          const targetCalories = profile?.target_calories || 2000;
+          const scaledMeals = scaleMealsToTarget(newMeals, targetCalories);
+
+          // Setar pendingPlan com as refeições escaladas
+          setPendingPlan(scaledMeals);
+          console.log('🍽️ [handleSend] pendingPlan setado com', scaledMeals.length, 'refeições (escaladas)');
+
+          // Validar plano usando scaledMeals (já ajustadas para target)
+          if (isCompletePlan && scaledMeals.length >= 3) {
+            const validation = validateMealPlan(scaledMeals, profile);
+
+            console.log('[handleSend] Validação do plano:', validation);
+
+            // Calcular totais (já devem estar ~100% do target)
+            const totalCals = Math.round(validation.totalCalories);
+            const targetCals = validation.targetCalories;
+            const diff = totalCals - targetCals;
+            const diffText = diff > 0
+              ? `${Math.round(diff)} kcal acima`
+              : diff < 0
+                ? `${Math.round(Math.abs(diff))} kcal abaixo`
+                : 'no alvo';
+
+            // Mensagem personalizada
+            let message = `✨ Preparei seu plano alimentar completo com ${scaledMeals.length} refeições!\n\n`;
+            message += `📊 **Totais do Dia:**\n`;
+            message += `🔥 ${totalCals} kcal (${diffText} do objetivo de ${targetCals} kcal)\n\n`;
+
+            if (validation.warnings.length > 0) {
+              message += `⚠️ **Avisos:**\n` + validation.warnings.map(w => `• ${w}`).join('\n') + '\n\n';
             }
 
-            if (ok) {
-              savedCount++;
-              console.log(`✅ Refeição "${meal.name}" ${isEdit ? 'atualizada' : 'salva'} (${savedCount}/${parsedMeals.length})`);
-            } else {
-              console.warn(`Refeição "${meal.name}" não foi ${isEdit ? 'atualizada' : 'salva'}.`);
-            }
-          } catch (err) {
-            console.error('Erro ao processar refeição:', err);
+            message += `👇 Veja o plano abaixo. Se quiser alterar algo, me diga (ex: "troca o jantar por peixe") ou clique em **Aceitar Plano** para salvar! 💚`;
+
+            await addMessage('assistant', message);
+          } else {
+            // Mensagem para criação/edição simples
+            await addMessage('assistant', `Preparei ${scaledMeals.length} refeição(ões) para você. 👇 Veja o plano abaixo e me diga se quer mudar algo ou clique em Aceitar.`);
           }
         }
-
-        // Gerar mensagem amigável para o chat
-        let friendly = '';
-        if (savedMealsSummaries.length === 1) {
-          friendly = `✅ Pronto — criei sua refeição: ${savedMealsSummaries[0]}. Ela está disponível em "Minhas Refeições".`;
-        } else if (savedMealsSummaries.length > 1) {
-          friendly = `✅ Criei ${savedMealsSummaries.length} refeições:
-${savedMealsSummaries.map(s => `- ${s}`).join('\n')}
-
-Todas estão em "Minhas Refeições".`;
-        } else {
-          friendly = '✅ Refeição(s) processada(s), verifique Minhas Refeições.';
-        }
-
-        await addMessage('assistant', friendly);
       } else {
-        // Nenhuma refeição encontrada: salvar apenas a versão limpa da mensagem
-        // `displayContent` já remove JSON/códigos e deixa texto amigável
+        // Nenhuma refeição encontrada: apenas mensagem de texto
         const clean = displayContent && displayContent.length > 0 ? displayContent : 'Resposta recebida.';
         await addMessage('assistant', clean);
       }
@@ -762,35 +831,69 @@ Todas estão em "Minhas Refeições".`;
                 </div>
               )}
 
+              {/* Preview do Plano - Versão compacta */}
+              {pendingPlan && pendingPlan.length > 0 && (
+                <div className="mt-4 animate-in slide-in-from-bottom-5 fade-in duration-500">
+                  <MealPlanPreview
+                    meals={pendingPlan}
+                    onAccept={handleAcceptPlan}
+                    onReject={handleRejectPlan}
+                  />
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </>
           )}
         </div>
 
-        {/* Input area */}
+        {/* Input area - Muda baseado no estado */}
         <div className="border-t bg-background p-3 sm:p-4 flex-shrink-0">
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && !isLoading && !error?.includes("Limite") && handleSend()}
-              placeholder={error?.includes("Limite") ? "Limite atingido. Faça upgrade." : "Digite sua mensagem..."}
-              disabled={isLoading || (error !== null && error.includes("Limite"))}
-              className="flex-1 rounded-full border-primary/30"
-            />
+          {/* Sem plano: mostra botão de criar */}
+          {!pendingPlan && !isLoading && (
             <Button
-              onClick={handleSend}
-              disabled={isLoading || !input.trim() || (error !== null && error.includes("Limite"))}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
-              size="icon"
+              onClick={() => {
+                setInput("crie um plano");
+                setTimeout(() => handleSend(), 100);
+              }}
+              id="botao-mari"
+              className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold py-6 rounded-xl shadow-lg"
+              size="lg"
             >
-              {isLoading ? (
-                <Sparkles className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
+              <Sparkles className="w-5 h-5 mr-2" />
+              Criar Plano Alimentar
             </Button>
-          </div>
+          )}
+
+          {/* Loading: mostra estado de carregamento */}
+          {isLoading && (
+            <div className="flex items-center justify-center gap-3 py-4 text-muted-foreground">
+              <Sparkles className="w-5 h-5 animate-spin text-primary" />
+              <span>Gerando seu plano alimentar...</span>
+            </div>
+          )}
+
+          {/* Com plano: mostra input para edição */}
+          {pendingPlan && !isLoading && (
+            <div className="flex gap-2">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && !isLoading && !error?.includes("Limite") && handleSend()}
+                placeholder="Quer mudar algo? Ex: 'troca o jantar por peixe'"
+                disabled={isLoading || (error !== null && error.includes("Limite"))}
+                className="flex-1 rounded-full border-primary/30"
+              />
+              <Button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim() || (error !== null && error.includes("Limite"))}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
+                size="icon"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -852,45 +955,59 @@ Todas estão em "Minhas Refeições".`;
                 {displayMessages.map((message, idx) => {
                   const displayContent = formatMessageForDisplay(message.role, message.content);
                   const actionSummary = message.role === "assistant" ? generateActionSummary(processAssistantMessage(message.content).metadata) : "";
+                  const isLastMessage = idx === displayMessages.length - 1;
+                  const showPlanPreview = isLastMessage && message.role === "assistant" && pendingPlan && pendingPlan.length > 0;
 
                   return (
-                    <div
-                      key={idx}
-                      className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 ${message.role === "user" ? "justify-end" : ""
-                        }`}
-                    >
-                      {message.role === "assistant" && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0 shadow-md">
-                          <Sparkles className="w-4 h-4 text-primary-foreground" />
-                        </div>
-                      )}
+                    <div key={idx}>
                       <div
-                        className={`rounded-2xl p-4 max-w-[80%] text-sm font-medium transition-all ${message.role === "user"
-                          ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
-                          : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
+                        className={`flex gap-3 animate-in fade-in slide-in-from-bottom-2 ${message.role === "user" ? "justify-end" : ""
                           }`}
                       >
-                        {actionSummary && (
-                          <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
-                            <CheckCircle2 className="w-3 h-3" />
-                            {actionSummary}
+                        {message.role === "assistant" && (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center flex-shrink-0 shadow-md">
+                            <Sparkles className="w-4 h-4 text-primary-foreground" />
                           </div>
                         )}
-                        <div className="whitespace-pre-wrap font-medium leading-relaxed">
-                          {displayContent}
+                        <div
+                          className={`rounded-2xl p-4 max-w-[80%] text-sm font-medium transition-all ${message.role === "user"
+                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm shadow-md hover:shadow-lg"
+                            : "bg-white border border-muted-foreground/20 rounded-tl-sm shadow-sm hover:shadow-md dark:bg-muted"
+                            }`}
+                        >
+                          {actionSummary && (
+                            <div className="flex items-center gap-1.5 text-xs font-semibold mb-2 text-green-600 dark:text-green-400">
+                              <CheckCircle2 className="w-3 h-3" />
+                              {actionSummary}
+                            </div>
+                          )}
+                          <div className="whitespace-pre-wrap font-medium leading-relaxed">
+                            {displayContent}
+                          </div>
+                          {message.timestamp && (
+                            <div className={`text-xs mt-2 opacity-60 font-normal`}>
+                              {new Date(message.timestamp).toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          )}
                         </div>
-                        {message.timestamp && (
-                          <div className={`text-xs mt-2 opacity-60 font-normal`}>
-                            {new Date(message.timestamp).toLocaleTimeString("pt-BR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                        {message.role === "user" && (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-secondary/80 flex items-center justify-center flex-shrink-0 shadow-md">
+                            <User className="w-4 h-4 text-secondary-foreground" />
                           </div>
                         )}
                       </div>
-                      {message.role === "user" && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-secondary/80 flex items-center justify-center flex-shrink-0 shadow-md">
-                          <User className="w-4 h-4 text-secondary-foreground" />
+
+                      {/* Preview do Plano - Aparece JUNTO com a última mensagem */}
+                      {showPlanPreview && (
+                        <div className="mt-4 ml-11 animate-in slide-in-from-bottom-5 fade-in duration-500">
+                          <MealPlanPreview
+                            meals={pendingPlan}
+                            onAccept={handleAcceptPlan}
+                            onReject={handleRejectPlan}
+                          />
                         </div>
                       )}
                     </div>
@@ -918,33 +1035,57 @@ Todas estão em "Minhas Refeições".`;
                   </div>
                 )}
 
+                {/* Scroll anchor - sempre no final */}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input */}
+              {/* Input - Muda baseado no estado */}
               <div className="border-t bg-muted/30 p-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && !isLoading && handleSend()}
-                    placeholder="Conte-me sobre seus objetivos..."
-                    disabled={isLoading}
-                    className="flex-1 border-primary/30 focus:border-primary"
-                  />
+                {/* Sem plano: mostra botão de criar */}
+                {!pendingPlan && !isLoading && (
                   <Button
-                    onClick={handleSend}
-                    disabled={isLoading || !input.trim()}
-                    className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md hover:shadow-lg transition-all"
-                    size="default"
+                    onClick={() => {
+                      setInput("crie um plano");
+                      setTimeout(() => handleSend(), 100);
+                    }}
+                    id="botao-mari"
+                    className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold py-6 rounded-xl shadow-lg"
+                    size="lg"
                   >
-                    {isLoading ? (
-                      <Sparkles className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Criar Plano Alimentar
                   </Button>
-                </div>
+                )}
+
+                {/* Loading: mostra estado de carregamento */}
+                {isLoading && (
+                  <div className="flex items-center justify-center gap-3 py-4 text-muted-foreground">
+                    <Sparkles className="w-5 h-5 animate-spin text-primary" />
+                    <span>Gerando seu plano alimentar...</span>
+                  </div>
+                )}
+
+                {/* Com plano: mostra input para edição */}
+                {pendingPlan && !isLoading && (
+                  <div className="flex gap-2">
+                    <Input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyPress={(e) => e.key === "Enter" && !isLoading && handleSend()}
+                      placeholder="Quer mudar algo? Ex: 'troca o jantar por peixe'"
+                      disabled={isLoading}
+                      className="flex-1 border-primary/30 focus:border-primary"
+                    />
+                    <Button
+                      onClick={handleSend}
+                      disabled={isLoading || !input.trim()}
+                      className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-md hover:shadow-lg transition-all"
+                      size="default"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}

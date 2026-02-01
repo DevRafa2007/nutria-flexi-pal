@@ -4,6 +4,7 @@
  */
 
 export type UserIntent =
+    | { type: 'create_full_plan'; mealCount?: number } // NOVO: plano completo do dia
     | { type: 'create'; mealCount: number; mealTypes?: string[] }
     | { type: 'edit'; mealId: string; changes: string }
     | { type: 'substitute'; mealId: string; oldFood: string; newFood: string }
@@ -99,6 +100,26 @@ export function detectIntent(message: string, mealsContext: string): UserIntent 
         }
     }
 
+    // ========== PLANO COMPLETO ==========
+
+    // Detectar pedidos de plano completo do dia
+    const fullPlanTriggers = [
+        'plano do dia', 'plano de hoje', 'plano',
+        'dieta do dia', 'dieta de hoje', 'dieta',
+        'minhas refeições', 'minhas refeiç',
+        'monta meu plano', 'monta minha dieta',
+        'cardápio', 'menu do dia'
+    ];
+
+    const hasFullPlanTrigger = fullPlanTriggers.some(trigger => lower.includes(trigger));
+
+    if (hasFullPlanTrigger) {
+        // Tentar extrair número de refeições se especificado
+        const countMatch = lower.match(/(\d+)\s+(?:refeições?|refeiç)/i);
+        const mealCount = countMatch ? parseInt(countMatch[1]) : undefined;
+        return { type: 'create_full_plan', mealCount };
+    }
+
     // ========== CRIAÇÃO ==========
 
     // "cria 5 refeições" ou "faz um plano do dia"
@@ -132,9 +153,28 @@ export function detectIntent(message: string, mealsContext: string): UserIntent 
 
 /**
  * Gera prompt específico baseado na intenção
+ * @param intent - Intenção detectada
+ * @param calories - Objeto opcional com target_calories e meals_per_day
  */
-export function generateIntentPrompt(intent: UserIntent): string {
+export function generateIntentPrompt(
+    intent: UserIntent,
+    calories?: { target: number; mealsPerDay: number }
+): string {
     switch (intent.type) {
+        case 'create_full_plan':
+            const mealsCount = calories?.mealsPerDay || intent.mealCount || 4;
+            const targetCals = calories?.target || 2000;
+
+            return `
+GERE PLANO COMPLETO: ${mealsCount} refeições, TOTAL ${targetCals} kcal
+
+RETORNE APENAS JSON:
+\`\`\`json
+[{"meal_id":"temp-1","name":"Café","meal_type":"breakfast","foods":[{"name":"Ovo","quantity":100,"unit":"g","protein":12,"carbs":1,"fat":9,"calories":143}],"totals":{"protein":30,"carbs":50,"fat":15,"calories":${Math.round(targetCals / mealsCount)}}}]
+\`\`\``;
+
+
+
         case 'edit':
             return `\n\n⚠️ MODO EDIÇÃO ATIVADO\nO usuário quer EDITAR a refeição [ID: ${intent.mealId}].\nMudanças solicitadas: ${intent.changes}\n\nRESPONDA com JSON incluindo "action": "edit" e "meal_id": "${intent.mealId}"`;
 

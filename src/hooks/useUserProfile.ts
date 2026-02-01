@@ -34,7 +34,9 @@ export function useUserProfile() {
 
   /**
    * Calcula TDEE baseado nas informações do perfil
-   * Fórmula de Harris-Benedict
+   * Fórmula de Mifflin-St Jeor (mais precisa e moderna)
+   * Homem: BMR = (10 × peso) + (6.25 × altura) - (5 × idade) + 5
+   * Mulher: BMR = (10 × peso) + (6.25 × altura) - (5 × idade) - 161
    */
   const calculateTDEE = useCallback((profileData: UserProfile): number => {
     if (!profileData.weight || !profileData.height || !profileData.age || !profileData.gender) {
@@ -43,19 +45,19 @@ export function useUserProfile() {
 
     let bmr: number;
 
-    // Calcular BMR
+    // Calcular BMR usando Mifflin-St Jeor
     if (profileData.gender === 'male') {
-      bmr = 88.362 + (13.397 * profileData.weight) + (4.799 * profileData.height) - (5.677 * profileData.age);
+      bmr = (10 * profileData.weight) + (6.25 * profileData.height) - (5 * profileData.age) + 5;
     } else if (profileData.gender === 'female') {
-      bmr = 447.593 + (9.247 * profileData.weight) + (3.098 * profileData.height) - (4.330 * profileData.age);
+      bmr = (10 * profileData.weight) + (6.25 * profileData.height) - (5 * profileData.age) - 161;
     } else {
       // Para 'other', usar média entre masculino e feminino
-      const bmrMale = 88.362 + (13.397 * profileData.weight) + (4.799 * profileData.height) - (5.677 * profileData.age);
-      const bmrFemale = 447.593 + (9.247 * profileData.weight) + (3.098 * profileData.height) - (4.330 * profileData.age);
+      const bmrMale = (10 * profileData.weight) + (6.25 * profileData.height) - (5 * profileData.age) + 5;
+      const bmrFemale = (10 * profileData.weight) + (6.25 * profileData.height) - (5 * profileData.age) - 161;
       bmr = (bmrMale + bmrFemale) / 2;
     }
 
-    // Multiplicadores de atividade
+    // Multiplicadores de atividade (mantidos)
     const activityMultipliers: Record<string, number> = {
       sedentary: 1.2,
       light: 1.375,
