@@ -4,9 +4,9 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 
 const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 30 },
+  initial: { opacity: 0, y: 40 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] as const },
+  transition: { duration: 0.9, delay, ease: [0.16, 1, 0.3, 1] as const },
 });
 
 const Hero = () => {
