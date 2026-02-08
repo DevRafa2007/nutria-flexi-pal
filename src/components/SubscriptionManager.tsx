@@ -43,6 +43,7 @@ interface SubscriptionDetails {
         currency: string;
         next_payment_attempt: number;
         period_end: number;
+        lines: { description: string; amount: number }[];
     } | null;
     cancel_at_period_end: boolean;
 }
