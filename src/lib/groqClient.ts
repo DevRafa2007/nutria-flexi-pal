@@ -380,6 +380,14 @@ FORMATO OBRIGATÓRIO (Copie e preencha):
   }
 ]
 
+⚠️ REGRAS CRÍTICAS DE UNIDADES DE MEDIDA:
+- OVOS: SEMPRE usar "unidade" (ex: quantity: 2, unit: "unidade"). NUNCA use gramas para ovos!
+- FRUTAS INTEIRAS: usar "unidade" (1 banana, 1 maçã, 2 laranjas)
+- PÃES: usar "fatia" ou "unidade" (2 fatias de pão integral)
+- ARROZ, FEIJÃO, CARNES, VERDURAS: usar "g" (gramas)
+- LÍQUIDOS: usar "ml" ou "xícara"
+- OLEAGINOSAS (nozes, amendoim): usar "g" ou "unidade" se forem poucas
+
 REGRAS DE OURO PARA O JSON:
 1. SEMPRE retorne um ARRAY contendo todas as refeições geradas.
 2. NUNCA coloque texto fora do JSON. Se quiser explicar algo, coloque dentro do campo "description" de cada refeição.

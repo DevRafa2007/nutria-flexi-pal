@@ -1,93 +1,108 @@
-import React, { useRef } from "react";
-import { motion, useScroll, useTransform, useSpring } from "framer-motion";
+import React, { useRef, useEffect, useState } from "react";
 
 interface ImmersiveScrollProps {
   children: React.ReactNode;
 }
 
-const springConfig = { stiffness: 80, damping: 30, mass: 0.8 };
+type VisibilityState = 'hidden' | 'entering' | 'visible' | 'exiting';
 
-const ImmersiveSection = ({ children, index }: { children: React.ReactNode; index: number }) => {
+interface SectionProps {
+  children: React.ReactNode;
+  index: number;
+}
+
+const ImmersiveSection = ({ children, index }: SectionProps) => {
   const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
+  const [state, setState] = useState<VisibilityState>(index === 0 ? 'visible' : 'hidden');
+  const [intersectionRatio, setIntersectionRatio] = useState(index === 0 ? 1 : 0);
 
-  // Raw transforms
-  const rawOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.15, 0.35, 0.65, 0.85, 1],
-    [0, 0.6, 1, 1, 0.6, 0]
-  );
-  const rawY = useTransform(
-    scrollYProgress,
-    [0, 0.15, 0.35, 0.65, 0.85, 1],
-    [120, 40, 0, 0, -40, -120]
-  );
-  const rawScale = useTransform(
-    scrollYProgress,
-    [0, 0.15, 0.35, 0.65, 0.85, 1],
-    [0.88, 0.95, 1, 1, 0.95, 0.88]
-  );
-  const rawBlur = useTransform(
-    scrollYProgress,
-    [0, 0.15, 0.35, 0.65, 0.85, 1],
-    [8, 2, 0, 0, 2, 8]
-  );
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
 
-  // Spring-smoothed values for buttery feel
-  const opacity = useSpring(rawOpacity, springConfig);
-  const y = useSpring(rawY, springConfig);
-  const scale = useSpring(rawScale, springConfig);
-  const blur = useSpring(rawBlur, springConfig);
-  const filter = useTransform(blur, (v) => `blur(${v}px)`);
+    // Thresholds para detectar diferentes níveis de visibilidade
+    const thresholds = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 
-  // Hero section: only scale + subtle blur, no fade from bottom
-  if (index === 0) {
-    const heroOpacity = useTransform(
-      scrollYProgress,
-      [0, 0.6, 0.85, 1],
-      [1, 1, 0.5, 0]
-    );
-    const heroScale = useTransform(
-      scrollYProgress,
-      [0, 0.6, 0.85, 1],
-      [1, 1, 0.92, 0.85]
-    );
-    const heroBlur = useTransform(
-      scrollYProgress,
-      [0, 0.6, 0.85, 1],
-      [0, 0, 4, 10]
-    );
-    const smoothHeroOpacity = useSpring(heroOpacity, springConfig);
-    const smoothHeroScale = useSpring(heroScale, springConfig);
-    const smoothHeroBlur = useSpring(heroBlur, springConfig);
-    const heroFilter = useTransform(smoothHeroBlur, (v) => `blur(${v}px)`);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const ratio = entry.intersectionRatio;
+          setIntersectionRatio(ratio);
 
-    return (
-      <motion.div
-        ref={ref}
-        style={{
-          opacity: smoothHeroOpacity,
-          scale: smoothHeroScale,
-          filter: heroFilter,
-        }}
-        className="will-change-transform"
-      >
-        {children}
-      </motion.div>
+          // Determinar estado baseado na visibilidade
+          if (ratio === 0) {
+            setState('hidden');
+          } else if (ratio < 0.3) {
+            // Detectar se está entrando (vindo de baixo) ou saindo (indo para cima)
+            const rect = entry.boundingClientRect;
+            if (rect.top > 0) {
+              setState('entering');
+            } else {
+              setState('exiting');
+            }
+          } else {
+            setState('visible');
+          }
+        });
+      },
+      {
+        threshold: thresholds,
+        rootMargin: '0px',
+      }
     );
-  }
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Calcular estilos baseados no estado e ratio
+  const getStyles = (): React.CSSProperties => {
+    const baseTransition = 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+
+    switch (state) {
+      case 'hidden':
+        return {
+          opacity: 0,
+          transform: 'translateY(30px) scale(0.98)',
+          transition: baseTransition,
+        };
+      case 'entering':
+        // Interpolação suave baseada no ratio
+        const enterOpacity = Math.min(intersectionRatio * 3, 1);
+        const enterY = Math.max(30 - (intersectionRatio * 100), 0);
+        const enterScale = 0.98 + (intersectionRatio * 0.02);
+        return {
+          opacity: enterOpacity,
+          transform: `translateY(${enterY}px) scale(${enterScale})`,
+          transition: baseTransition,
+        };
+      case 'visible':
+        return {
+          opacity: 1,
+          transform: 'translateY(0) scale(1)',
+          transition: baseTransition,
+        };
+      case 'exiting':
+        // Fade out suave ao sair
+        const exitOpacity = Math.max(intersectionRatio * 2, 0.1);
+        const exitY = -((1 - intersectionRatio) * 20);
+        return {
+          opacity: exitOpacity,
+          transform: `translateY(${exitY}px) scale(0.99)`,
+          transition: baseTransition,
+        };
+    }
+  };
 
   return (
-    <motion.div
+    <div
       ref={ref}
-      style={{ opacity, y, scale, filter }}
+      style={getStyles()}
       className="will-change-transform"
     >
       {children}
-    </motion.div>
+    </div>
   );
 };
 

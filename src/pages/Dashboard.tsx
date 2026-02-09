@@ -178,18 +178,18 @@ export function DashboardPage() {
 
 
           <div className="space-y-6">
-            {/* Status da Assinatura (Topo - Sem Gerenciar) */}
-            <SubscriptionStatus hideManage={true} />
-
-            {/* Barras de Progresso de Macros */}
-            <div className="animate-in slide-in-from-top-4 duration-500">
-              <MacroProgress />
-            </div>
-
             <div className="space-y-4">
-              {/* Aba de Refeições */}
+              {/* Aba de Refeições - inclui Status e Macros */}
               {currentTab === "meals" && (
                 <div className="space-y-4 animate-fade-in">
+                  {/* Status da Assinatura (apenas em Minhas Refeições) */}
+                  <SubscriptionStatus hideManage={true} />
+
+                  {/* Barras de Progresso de Macros (apenas em Minhas Refeições) */}
+                  <div className="animate-in slide-in-from-top-4 duration-500">
+                    <MacroProgress />
+                  </div>
+
                   <MealsList
                     onRequestTutorial={() => {
                       console.log("[Dashboard] Usuário clicou para ver tutorial");

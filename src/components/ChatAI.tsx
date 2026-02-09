@@ -534,6 +534,46 @@ ${previousMealsContext}`;
 
       }
 
+      // 🔄 INJETAR PLANO PENDENTE PARA EDIÇÕES DIRETAS
+      // Se já existe um plano em preview, enviar para IA modificar diretamente
+      if (pendingPlan && pendingPlan.length > 0) {
+        const planJson = JSON.stringify(pendingPlan.map(m => ({
+          meal_type: m.type,
+          name: m.name,
+          description: m.description,
+          foods: m.foods.map(f => ({
+            name: f.name,
+            quantity: f.quantity,
+            unit: f.unit,
+            calories: f.macros.calories,
+            protein: f.macros.protein,
+            carbs: f.macros.carbs,
+            fat: f.macros.fat
+          })),
+          totals: m.totalMacros
+        })), null, 2);
+
+        enhancedPrompt += `
+
+🔄 MODO EDIÇÃO DE PLANO ATIVO
+═══════════════════════════════
+O usuário já tem um plano em exibição. Quando ele pedir alterações, você deve:
+1. NÃO retornar texto explicativo fora do JSON
+2. Retornar APENAS o JSON array com o plano COMPLETO atualizado
+3. Modificar apenas a refeição pedida, mantendo as outras iguais
+4. Manter os macros totais do dia corretos após a edição
+
+PLANO ATUAL EM PREVIEW:
+${planJson}
+
+INSTRUÇÕES DE EDIÇÃO:
+- Se o usuário pedir "troca X por Y", modifique APENAS essa refeição
+- Se o usuário pedir "mais proteína no jantar", ajuste os alimentos do jantar
+- Retorne o ARRAY COMPLETO com todas as refeições (editadas + não editadas)
+- Mantenha o total de calorias próximo à meta de ${profile?.target_calories || 2000}kcal
+`;
+      }
+
       // Adicionar prompt específico da intenção (com calorias do perfil)
       const intentPrompt = generateIntentPrompt(intent, {
         target: profile?.target_calories || 2000,

@@ -1,13 +1,74 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 40 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.9, delay, ease: [0.16, 1, 0.3, 1] as const },
-});
+const ScrollIndicator = () => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // Esconde o indicador após scrollar um pouco
+      setIsVisible(window.scrollY < 100);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  if (!isVisible) return null;
+
+  return (
+    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-fade-in">
+      <span className="text-xs text-muted-foreground/70 font-medium tracking-wide">
+        Role para descobrir mais
+      </span>
+      <div className="relative">
+        {/* Mouse outline */}
+        <div className="w-6 h-10 rounded-full border-2 border-primary/40 flex justify-center pt-2">
+          {/* Scroll wheel animation */}
+          <div
+            className="w-1 h-2 bg-primary/60 rounded-full"
+            style={{
+              animation: 'scrollWheel 2s ease-in-out infinite',
+            }}
+          />
+        </div>
+        {/* Chevron bouncing */}
+        <ChevronDown
+          className="w-4 h-4 text-primary/50 absolute -bottom-5 left-1/2 -translate-x-1/2"
+          style={{
+            animation: 'bounce 2s ease-in-out infinite',
+          }}
+        />
+      </div>
+
+      {/* Keyframes inline */}
+      <style>{`
+        @keyframes scrollWheel {
+          0%, 100% { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+          50% { 
+            opacity: 0.3;
+            transform: translateY(4px);
+          }
+        }
+        @keyframes bounce {
+          0%, 100% { 
+            transform: translateX(-50%) translateY(0);
+            opacity: 0.5;
+          }
+          50% { 
+            transform: translateX(-50%) translateY(4px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
 
 const Hero = () => {
   return (
@@ -22,25 +83,25 @@ const Hero = () => {
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Content */}
           <div className="space-y-6 sm:space-y-8">
-            <motion.div {...fadeUp(0)} className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
+            <div className="inline-flex items-center gap-2 bg-primary/10 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full">
               <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
               <span className="text-xs sm:text-sm font-medium text-primary">Powered by AI</span>
-            </motion.div>
+            </div>
 
-            <motion.h1 {...fadeUp(0.1)} className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight">
               <span className="text-gradient">myNutrIA</span>
               <br />
               <span className="text-foreground">Seu Nutricionista</span>
               <br />
               <span className="text-foreground">Inteligente</span>
-            </motion.h1>
+            </h1>
 
-            <motion.p {...fadeUp(0.2)} className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
+            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-lg">
               Converse com a IA que entende sua rotina e transforma sua alimentação.
               Dietas personalizadas baseadas nos alimentos que você já come.
-            </motion.p>
+            </p>
 
-            <motion.div {...fadeUp(0.3)} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Button
                 size="lg"
                 asChild
@@ -61,9 +122,9 @@ const Hero = () => {
                   Fazer Login
                 </Link>
               </Button>
-            </motion.div>
+            </div>
 
-            <motion.div {...fadeUp(0.4)} className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
+            <div className="flex gap-6 sm:gap-8 pt-4 sm:pt-8">
               <div>
                 <div className="text-2xl sm:text-3xl font-bold text-primary">10K+</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Planos Criados</div>
@@ -76,11 +137,11 @@ const Hero = () => {
                 <div className="text-2xl sm:text-3xl font-bold text-primary">24/7</div>
                 <div className="text-xs sm:text-sm text-muted-foreground">Disponível</div>
               </div>
-            </motion.div>
+            </div>
           </div>
 
           {/* Right Content - Chat Preview */}
-          <motion.div {...fadeUp(0.3)} className="relative mt-8 lg:mt-0">
+          <div className="relative mt-8 lg:mt-0">
             <div className="bg-card rounded-2xl sm:rounded-3xl shadow-card border border-border/50 overflow-hidden">
               <div className="bg-gradient-primary p-4 sm:p-6 text-primary-foreground">
                 <div className="flex items-center gap-3">
@@ -125,9 +186,12 @@ const Hero = () => {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
+
+      {/* Scroll Indicator */}
+      <ScrollIndicator />
     </section>
   );
 };

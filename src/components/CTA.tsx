@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Check, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
 interface Plan {
@@ -55,13 +54,6 @@ const plans: Plan[] = [
   },
 ];
 
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 50 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, amount: 0.15 },
-  transition: { duration: 0.8, delay, ease: [0.16, 1, 0.3, 1] as const },
-});
-
 const CTA = () => {
   const navigate = useNavigate();
 
@@ -73,22 +65,21 @@ const CTA = () => {
   return (
     <section className="py-16 sm:py-24 px-4 bg-gradient-to-b from-background to-muted/30">
       <div className="container max-w-6xl mx-auto space-y-10 sm:space-y-16">
-        <motion.div {...fadeUp()} className="text-center space-y-4">
+        <div className="text-center space-y-4">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
             <span className="text-gradient">Planos de Assinatura</span>
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto">
             Escolha o plano perfeito para sua jornada de saúde e bem-estar
           </p>
-        </motion.div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
-          {plans.map((plan, idx) => (
-            <motion.div key={plan.id} {...fadeUp(idx * 0.1)} className="h-full">
+          {plans.map((plan) => (
+            <div key={plan.id} className="h-full">
               <Card
-                className={`bg-card/80 backdrop-blur w-full relative h-full transition-all duration-300 hover:shadow-lg flex flex-col ${
-                  plan.highlighted ? "border-primary shadow-glow md:scale-105 z-10" : "border-border/50"
-                }`}
+                className={`bg-card/80 backdrop-blur w-full relative h-full transition-all duration-300 hover:shadow-lg flex flex-col ${plan.highlighted ? "border-primary shadow-glow md:scale-105 z-10" : "border-border/50"
+                  }`}
               >
                 {plan.highlighted && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -132,18 +123,17 @@ const CTA = () => {
                   <Button
                     onClick={() => handleSelectPlan(plan.name)}
                     size="lg"
-                    className={`w-full group ${
-                      plan.highlighted
+                    className={`w-full group ${plan.highlighted
                         ? "bg-primary hover:bg-primary-dark"
                         : "bg-muted hover:bg-muted-foreground/20 text-foreground"
-                    }`}
+                      }`}
                   >
                     {plan.cta}
                     <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </CardContent>
               </Card>
-            </motion.div>
+            </div>
           ))}
         </div>
 

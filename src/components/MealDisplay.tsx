@@ -41,12 +41,29 @@ const MealDisplay = ({ meal, mealId, onUpdate, onDelete }: MealDisplayProps) => 
       return acc;
     }, {} as Record<string, MeasurementUnit>)
   );
-  const [consumedFoods, setConsumedFoods] = useState<Set<number>>(new Set());
-  const [allConsumed, setAllConsumed] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { markMealConsumed } = useConsumptionTracking();
-  const { markFoodConsumed, unmarkFoodConsumed } = useConsumedFoods();
+  const { markFoodConsumed, unmarkFoodConsumed, isFoodConsumedToday } = useConsumedFoods();
+
+  // Inicializar estado de consumedFoods a partir do banco de dados
+  // O estado é sincronizado com o contexto global que persiste os dados
+  const getInitialConsumedFoods = (): Set<number> => {
+    if (!mealId) return new Set();
+    const consumed = new Set<number>();
+    meal.foods.forEach((_, idx) => {
+      if (isFoodConsumedToday(mealId, idx)) {
+        consumed.add(idx);
+      }
+    });
+    return consumed;
+  };
+
+  const [consumedFoods, setConsumedFoods] = useState<Set<number>>(getInitialConsumedFoods);
+  const [allConsumed, setAllConsumed] = useState(() => {
+    const initial = getInitialConsumedFoods();
+    return initial.size === meal.foods.length;
+  });
 
   const getMealTypeColor = (type: string) => {
     const colors: Record<string, string> = {
